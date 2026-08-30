@@ -8,11 +8,11 @@
 
 - [git-commit](https://github.com/huzhw/git-commit-skill)：Git 提交规范
 - [coding-rules](https://github.com/huzhw/coding-rules)：AI 编码协作规范
-- [reread-claude-md](https://github.com/huzhw/reread-claude-md-skill)：重新加载 CLAUDE.md 规则
-- [daily-record](https://github.com/huzhw/daily-record-skill)：日报记录
-- [daily-merge](https://github.com/huzhw/daily-merge-skill)：日报合并
+- [reread-rules](https://github.com/huzhw/reread-rules-skill)：重载 CLAUDE.md / AGENTS.md 规则
+- [daily-record-gitlab-md](https://github.com/huzhw/daily-record-gitlab-md-skill)：日报记录
+- [daily-merge-gitlab-excel](https://github.com/huzhw/daily-merge-gitlab-excel-skill)：日报合并
 - [code-check](https://github.com/huzhw/code-check-skill)：增量代码隐患检查
-- [token-3000](https://github.com/huzhw/token-3000-skill)：API Token 切换
+- [claude-code-token-3000](https://github.com/huzhw/claude-code-token-3000-skill)：Claude Code API Token 切换
 
 ---
 
