@@ -1,6 +1,6 @@
 ---
 name: deepseek-harness-settings-curator
-description: DeepSeek Harness（DSH）专用技能：定期梳理 settings.yaml 的 LLM 供应商模型配置（追加新模型、清理失效/重复模型、参数量与版本标记对齐、找限时免费模型）。触发词：梳理配置、梳理模型、settings.yaml、追加模型、清理模型、清理旧模型、免费模型、限时免费、参数对齐、模型配置、模型维护。
+description: DeepSeek Harness（DSH）专用技能：定期梳理 settings.yaml 的 LLM 供应商模型配置（追加新模型、清理失效/重复模型、参数量与版本标记对齐、找限时免费模型）。触发词：梳理配置、梳理模型、settings.yaml、追加模型、清理模型、清理旧模型、免费模型、限时免费、参数对齐、模型配置、模型维护、默认模型、模型路由、切模型、费用检查、agent-default-model。
 author: 胡志伟
 platform: DSH (DeepSeek Harness)
 motto: "配置如园，常理常新。查证为准，不写未知。每次改动，方案先行。"
@@ -14,6 +14,8 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 
 - 主文件：`C:\Users\Administrator\.dsh\settings.yaml`（DSH LLM 供应商配置，key 明文存放，勿外传）
 - 已知 provider：bailian（百炼）、company-gateway（公司网关）、volcengine（火山方舟）、opencode-go（OpenCode Go）、openrouter-go（OpenRouter）、sensenova（商汤日月新）、zhipu（智谱GLM官方）
+- 默认模型（agent-default-model）：`settings.yaml` 顶层段 **+** `profiles/tui/cordis.patch.yml`、`profiles/web/cordis.patch.yml` 补丁段（**patch 覆盖 settings，生效以 patch 为准**）
+- 网络放行：`C:\Users\Administrator\.dsh\rules.yaml` 网络白名单（查官方价目需放行 `api.deepseek.com` / `bigmodel.cn` / `open.bigmodel.cn`；2026-08-31 已加）
 
 ## 安全红线（必读）
 
@@ -61,8 +63,24 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - 评估：免费条件是否限时、适合挂哪个 provider、收费后是否保留。
 - 汇报格式：模型 / 免费条件 / 有效期 / 建议动作。
 
-### 6. 流程红线
+### 6. 默认模型（agent-default-model）梳理与费用核查
+
+- 位置与生效：settings.yaml 顶层段 + 两个 profile 的 cordis.patch.yml（**patch 覆盖 settings，两处不一致以 patch 为准**）。
+- 影响面：默认模型 = 主代理路由，**dsh-auto-review 审查器 fork 继承同一路由**，改一处两者同切渠道。
+- 检查项：provider 必须在 settings.yaml `llm-pi-ai.providers` 存在（或内置 deepseek 官方路由）；model id 必须在对应 provider 的 models 列表。
+- 历史坑：patch 残留 `provider: deepseek`（官网）会同时把主代理+审查器烧向官网（2026-08-31 已切 `zhipu / glm-5.3-flash`）。
+- 费用核查（选型依据）：
+  1. 本地优先：`pi-ai\dist\providers\data\*.json` 的 `cost` 字段（input/output/cacheRead，单位 $/1M；全 0 = 免费）。**注意快照滞后**：本地是 7/25 生成，DeepSeek 8/17 调价（峰谷定价，高峰最高 +1100%，周末低谷价）后已作废，必须与官网/报道对账。
+  2. web_search 兜底（如 `DeepSeek 调价 峰谷 每百万`）。
+  3. 查不到就明说"未查到"，不编造（glm-5.3-flash 官方价目当前即未查到状态，由用户浏览器确认）。
+  - DeepSeek 官网最新价（2026-08 调价后，api-docs.deepseek.com）：flash 输入·缓存未命中 1.5/3.0 元（空闲/高峰）、输出 4.5/9.0 元；**缓存命中输入仅 0.05/0.10 元（差 30 倍）**——缓存命中率低即"贵"主因；pro 为 flash 恰好 3 倍；高峰=周一至五 9-12、14-18 点，空闲=高峰半价。
+  - 对比表格式：模型 / 渠道 / 输入 / 输出 / 缓存读 / 免费？
+  - 更合适就切换：列候选 → 用户选 → 确认词 → 备份 patch → 改 → 校验。
+- 2026-08-31 状态：已切 `zhipu / glm-5.3-flash`，patch 备份 `cordis.patch.yml.bak-20260831-085333`。
+
+### 7. 流程红线
 - 任何改动前：**分析 → 方案结尾带四字成语确认词 → 等用户回确认词才动手**（"行/好/确认"等不算）。
+- 改 agent-default-model 前**先备份两个 profile 的 cordis.patch.yml**（`Copy-Item <file> cordis.patch.yml.bak-<时间戳>`）。
 - 多个方案列出来让用户选，不替用户做主。
 - 改后校验（工作目录放 DSH checkout，yaml 依赖在 node_modules）：
   ```powershell
@@ -77,3 +95,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - `ui-onboarding:` 等顶层键在 0 列（无缩进），编辑锚点别加空格。
 - edit 工具 old_string 需与文件精确一致（含缩进）；多行块编辑比逐行安全。
 - 公司网关内网 `192.168.80.248:3000` 在白名单外，无法直连查验，按官网口径（0731/0813=正式版）标注。
+- agent-default-model 在 settings.yaml 与两个 profile patch 各有一份，容易两处不一致；patch 覆盖 settings，排查以 patch 为准。
+- dsh-auto-review 审查器 fork 继承会话路由：换默认模型 = 主代理+审查器同时换渠道，反之亦然。
+- zhipu key 明文在 settings.yaml；dsh-defend 拦 `sk-`/Bearer 样式，写带 key 配置用"Authorization: Bearer 换行缩进下一行"写法。
+- Windows 沙箱受限令牌下 curl 的 schannel 报 `SEC_E_NO_CREDENTIALS`（TLS 挂），抓 https 用 node fetch 更稳；node 脚本写工作区 `_tmp\` 再跑，避免 shell 引号转义。
