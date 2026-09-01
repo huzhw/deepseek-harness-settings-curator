@@ -12,14 +12,22 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 
 ## 目标文件
 
-- 主文件：`C:\Users\Administrator\.dsh\settings.yaml`（DSH LLM 供应商配置，key 明文存放，勿外传）
-- 已知 provider：bailian（百炼）、company-gateway（公司网关）、volcengine（火山方舟）、opencode-go（OpenCode Go）、openrouter-go（OpenRouter）、sensenova（商汤日月新）、zhipu（智谱GLM官方）
+- 主文件：`C:\Users\Administrator\.dsh\settings.yaml`（DSH LLM 供应商配置；密钥已零明文迁到 `~/.dsh/.credentials.yaml`，settings 用 apiKeyEnv 变量名引用，两处都勿外传）
+- 已知 provider（精简阵容 5 个）：zhipu（智谱GLM官方）、opencode-go（OpenCode Go）、bailian（百炼）、company-gateway（公司网关3000）、openrouter-go（OpenRouter直连）；已下线：volcengine（火山方舟）、sensenova（商汤日月新）
 - 默认模型（agent-default-model）：`settings.yaml` 顶层段 **+** `profiles/tui/cordis.patch.yml`、`profiles/web/cordis.patch.yml` 补丁段（**patch 覆盖 settings，生效以 patch 为准**）
 - 网络放行：`C:\Users\Administrator\.dsh\rules.yaml` 网络白名单（查官方价目需放行 `api.deepseek.com` / `bigmodel.cn` / `open.bigmodel.cn`；2026-08-31 已加）
 
+## 用户选型偏好（用户口味确认，梳理时优先执行）
+
+- 常用主力只留三条线：**DeepSeek 系、GLM 系（各自必须带 flash 档）、千问系（flash 为主，1~2 个）**。
+- 免费渠道保留：company-gateway（New API 类公司网关）、openrouter-go（auto/free/fusion 免费聚合档）——即"牛来那种免费"口径。
+- **非偏好系厂商/模型一律不主动加**，用户点名才加，加前照常查证。
+- 每次梳理以精简为先：同款模型多渠道重复时，只留最稳/最便宜的，其余列删除清单走确认流程。
+- 千问 flash 口径：bailian 只配 `qwen3.7-flash`（实测 200 通）。`qwen3.6-flash` 模型存在但免费额度已耗尽（403 insufficient_quota，需充值或控制台关闭 free-tier-only），额度恢复前不加回。
+
 ## 安全红线（必读）
 
-1. **文件含明文 API key，禁止整文件 read/输出**——会命中 dsh-defend（sk-openai / bearer-token 规则）被拦截。
+1. **密钥文件含明文 API key，禁止整文件 read/输出**——会命中 dsh-defend（sk-openai / bearer-token 规则）被拦截。settings.yaml 已零明文（apiKeyEnv 引用），明文密钥本体在 `~/.dsh/.credentials.yaml`，掩码规则照旧适用。
    - 查看：用分段 read 跳过密钥行；或 pwsh 掩码后输出：
      ```powershell
      $m = $l -replace 'sk-[A-Za-z0-9_\-\.]+', 'KEY'
