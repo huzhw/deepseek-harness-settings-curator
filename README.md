@@ -15,6 +15,7 @@
 - [claude-code-token-3000](https://github.com/huzhw/claude-code-token-3000-skill)：Claude Code API Token 切换
 - [agent-config-sync-check](https://github.com/huzhw/agent-config-sync-check)：四端同步守卫：链接/硬链接/README 同步检查与修复
 - [service-manager](https://github.com/huzhw/service-manager)：服务管理器（关联仓库，非 skill）
+- [daily-report-panel](https://github.com/huzhw/daily-report-panel)：日报管家（关联仓库，非 skill，自动合并/导出/发件）
 
 ---
 
