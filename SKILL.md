@@ -13,7 +13,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 ## 目标文件
 
 - 主文件：`C:\Users\Administrator\.dsh\settings.yaml`（DSH LLM 供应商配置；密钥已零明文迁到 `~/.dsh/.credentials.yaml`，settings 用 apiKeyEnv 变量名引用，两处都勿外传）
-- 已知 provider（精简阵容 5 个）：zhipu（智谱GLM官方）、opencode-go（OpenCode Go）、bailian（百炼）、company-gateway（公司网关3000）、openrouter-go（OpenRouter直连）；已下线：volcengine（火山方舟）、sensenova（商汤日月新）
+- 已知 provider（精简阵容 5 个）：zhipu（智谱GLM官方）、opencode-go（OpenCode Go）、bailian（百炼）、company-gateway（公司网关3000）、openrouter-go（OpenRouter直连）；已下线：volcengine（火山方舟）、sensenova（商汤日月新）；另有官方直连路由 `deepseek-official`（配置段 `llm-deepseek:`，非 llm-pi-ai 成员，详见 §7）
 - 默认模型（agent-default-model）：`settings.yaml` 顶层段 **+** `profiles/tui/cordis.patch.yml`、`profiles/web/cordis.patch.yml` 补丁段（**patch 覆盖 settings，生效以 patch 为准**）
 - 网络放行：`C:\Users\Administrator\.dsh\rules.yaml` 网络白名单（查官方价目需放行 `api.deepseek.com` / `bigmodel.cn` / `open.bigmodel.cn`；2026-08-31 已加）
 
@@ -50,7 +50,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - 查证模型存在性与 id：本地官方目录优先 → web_search 兜底（厂商公告、模型页、vLLM recipes）。
 - 参数量：多源交叉（vLLM recipes、厂商公告、目录官方 name）；MoE 取总参；查不到不标。
 - 版本标记（仅 DeepSeek 系有预览/正式之分）：`/正式`（0731=Flash 正式版、0813=Pro 正式版、-ga- 日期=GA 正式）或 `/预览`（无后缀活接口、未切正式的渠道）。商汤的"服务公测免费"是活动不是模型版本。
-- 命名规范：`<前缀>/<模型id>/<参数量>(/<版本>)`；前缀约定：百炼 / 火山方舟 / 公司网关 / OpenCode / OpenRouter / 商汤日月新 / 智谱。
+- 命名规范：`<前缀>/<模型id>/<参数量>(/<版本>)`；前缀约定：百炼 / 火山方舟 / 公司网关 / OpenCode / OpenRouter / 商汤日月新 / 智谱 / 官网（deepseek-official 官方直连）。
 
 ### 3. 清理旧模型
 - 识别依据：调用 404、厂商下架、免费变收费、重复条目。
@@ -75,8 +75,8 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 
 - 位置与生效：settings.yaml 顶层段 + 两个 profile 的 cordis.patch.yml（**patch 覆盖 settings，两处不一致以 patch 为准**）。
 - 影响面：默认模型 = 主代理路由，**dsh-auto-review 审查器 fork 继承同一路由**，改一处两者同切渠道。
-- 检查项：provider 必须在 settings.yaml `llm-pi-ai.providers` 存在（或内置 deepseek 官方路由）；model id 必须在对应 provider 的 models 列表。
-- 历史坑：patch 残留 `provider: deepseek`（官网）会同时把主代理+审查器烧向官网（2026-08-31 已切 `zhipu / glm-5.3-flash`）。
+- 检查项：provider 必须在 settings.yaml `llm-pi-ai.providers` 存在，或为官方直连路由 `deepseek-official`（配置在 `llm-deepseek:` 段，见 §7）；model id 必须在对应 provider 的 models 列表（deepseek-official 对应 `llm-deepseek.models` 或内置目录三行之一）。
+- 历史坑：patch 残留 `provider: deepseek`（缺 -official 的旧写法）会同时把主代理+审查器烧向官网（2026-08-31 已切 `zhipu / glm-5.3-flash`）；官方直连的规范路由名是 `deepseek-official`，别把正确名当坑绕开。
 - 费用核查（选型依据）：
   1. 本地优先：`pi-ai\dist\providers\data\*.json` 的 `cost` 字段（input/output/cacheRead，单位 $/1M；全 0 = 免费）。**注意快照滞后**：本地是 7/25 生成，DeepSeek 8/17 调价（峰谷定价，高峰最高 +1100%，周末低谷价）后已作废，必须与官网/报道对账。
   2. web_search 兜底（如 `DeepSeek 调价 峰谷 每百万`）。
@@ -86,7 +86,19 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
   - 更合适就切换：列候选 → 用户选 → 确认词 → 备份 patch → 改 → 校验。
 - 2026-08-31 状态：已切 `zhipu / glm-5.3-flash`，patch 备份 `cordis.patch.yml.bak-20260831-085333`。
 
-### 7. 流程红线
+### 7. deepseek-official 官方直连渠道
+
+- 定位：DeepSeek 官方直连适配器（`dsh-llm-deepseek`），路由名 `deepseek-official`（不是 `deepseek`）；配置在 settings.yaml 顶层 `llm-deepseek:` 段，独立于 `llm-pi-ai.providers`，两套适配器可并存。
+- 结构（照 schema 实录）：
+  - `apiKeyEnv`：凭据引用名，默认 `DEEPSEEK_API_KEY`（凭据 ref 已存在）；`baseURL` 缺省即官方公共端点。
+  - `thinking`：enabled/disabled；`reasoningEffort`：off/low/high/max。
+  - `models`：数组，每项 `id` / `name`（选择器显示名）/ `description` / `contextWindow` / `maxTokens`，可选 `inputModalities`（vision 档需声明 text+image 才能收图）。
+- 内置目录（`models` 未落盘即继承）：`deepseek-v4-flash`、`deepseek-v4-pro`、`deepseek-v4-flash-vision-exp`（text+image）。
+- GUI 入口：设置→模型→DeepSeek 行；每行可改 id/显示名/上下文/最大输出，可增删行，改后落 `llm-deepseek.models` 的 `name`，「/model」弹窗与 composer 显示该名。
+- 梳理检查项：`models` 空 = 继承内置目录；id 重复 / name 缺失 / 与 pi-ai 渠道同款模型按"精简为先"去重（只留最稳或最便宜）；版本标记沿用 DeepSeek 系口径（0731=Flash 正式、0813=Pro 正式、-ga- =GA）。
+- 费用：价目见 §6 费用核查（缓存命中输入 0.05/0.10 元，差 30 倍）。
+
+### 8. 流程红线
 - 任何改动前：**分析 → 方案结尾带四字成语确认词 → 等用户回确认词才动手**（"行/好/确认"等不算）。
 - 改 agent-default-model 前**先备份两个 profile 的 cordis.patch.yml**（`Copy-Item <file> cordis.patch.yml.bak-<时间戳>`）。
 - 多个方案列出来让用户选，不替用户做主。
