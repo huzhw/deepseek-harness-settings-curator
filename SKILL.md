@@ -16,6 +16,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - 已知 provider（精简阵容 5 个）：zhipu（智谱GLM官方）、opencode-go（OpenCode Go）、bailian（百炼）、company-gateway（公司网关3000）、openrouter-go（OpenRouter直连）；已下线：volcengine（火山方舟）、sensenova（商汤日月新）；另有官方直连路由 `deepseek-official`（配置段 `llm-deepseek:`，非 llm-pi-ai 成员，详见 §7）
 - 默认模型（agent-default-model）：`settings.yaml` 顶层段 **+** `profiles/tui/cordis.patch.yml`、`profiles/web/cordis.patch.yml` 补丁段（**patch 覆盖 settings，生效以 patch 为准**）
 - 网络放行：`C:\Users\Administrator\.dsh\rules.yaml` 网络白名单（查官方价目需放行 `api.deepseek.com` / `bigmodel.cn` / `open.bigmodel.cn`；2026-08-31 已加）
+- **Codex 侧同步链（详见 §8 Codex 侧同步）**：`C:\Users\Administrator\.codex\models.json`（Codex 模型目录，由 live `~/.codex/config.toml` 的 `model_catalog_json` 指向）← 定时任务「codex opencode-go 全量口径巡检」（13:10）每轮维护；而 `C:\Users\Administrator\.codemoss\config.json`（CCGUI 插件 `idea-claude-code-gui` 的私有状态，内含 Codex 供应商的 `configToml` 模板）**是原厂件，只能在该插件 UI 里改，外部一律只读**——改它会让插件的 `appliedProviderRevision` 校验失配、Codex 会话直接罢工。**codemoss 的 `claude` 段与 `~/.claude` 下任何文件更不属本技能管辖，禁止改动**
 
 ## 用户选型偏好（用户口味确认，梳理时优先执行）
 
@@ -140,6 +141,40 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 
 **执行方式**：定时任务「opencode-go 全量口径巡检」每 5 小时按本节跑（B 模式自主落库：先备份 → 改 → 跑上面 1~4 项校验 → 任一失败即还原备份并报错）；人工梳理时并入 §1「最新 flash 巡视」同轮。
 
+**Codex 侧同步（models.json 归我们 + CCGUI 模板归插件）**——2026-09-10 起由定时任务「codex opencode-go 全量口径巡检」（13:10）每轮执行
+
+- **一句话执行**（脚本内含并发防护、备份、校验不过自动回滚、Codex 本体实测）：
+  ```powershell
+  node "F:\idea-workspase-skills\deepseek-harness-settings-curator\scripts\codex-opencode-sync.mjs"           # 预览，零写入
+  node "F:\idea-workspase-skills\deepseek-harness-settings-curator\scripts\codex-opencode-sync.mjs" --apply   # 备份 + 落库 + 自校验
+  # 调试：--emit <目录> 导出"应然产物"做 diff；--force 忽略并发防护
+  # ⚠️ --write-codemoss 会写 .codemoss\config.json —— 默认关闭，非必要别开（2026-09-10 事故成因）
+  ```
+- **口径**（与 DSH 的 §8 全量口径不是一套）：
+  - 收录集合 = `settings.yaml` 的 `opencode-go.models` 里 **id 匹配 `^deepseek` 或 `^glm`** 的条目（DeepSeek 全系 + GLM 全系，2026-09-10 为 8 条）；其余渠道内模型（mimo / kimi / minimax / qwen / hy / grok / longcat / omen / muse-spark / gpt-*）**一律不进 Codex 清单**。
+  - `slug` = 官方 API id **原样**（V4.1 Flash 的 slug 是 `deepseek-flash`）；**`display_name` = 照抄 DSH 的 `name` 整串**（别名与 DSH 一致，带 `新/`、`N倍用量/` 标记与次数）；排序 = 按 name 末尾次数倒序，同次数按 settings.yaml 原序。
+  - 其余字段逐字沿用 Codex 目录模板（`base_instructions` / `supported_reasoning_levels` 五档 / `priority:1` / `context_window:1000000` / `effective_context_window_percent:95` …），**不新增不删字段**。
+  - **口径默认模型 = DeepSeek 系里调用次数最大的那条的官方 id**（2026-09-10 为 `deepseek-flash`，4 倍用量 26,000 次/5h）。**但默认模型由 CCGUI 供应商模板的 `model` 行决定，脚本只报不写**——要改就在 CCGUI 供应商管理 UI 里改（见下）。
+- **落点与归属（2026-09-10 事故后定，红线）**：
+  | 文件 | 归属 | 脚本动作 |
+  |---|---|---|
+  | `~\.codex\models.json` | **我们**（插件不碰） | 全量维护（唯一真正落库的文件） |
+  | `~\.codex\config.toml` | CCGUI 按模板重写 | **只兜底补 `model_catalog_json` 行**；`model` 行与注释一概不写 |
+  | `~\.codemoss\config.json` | **CCGUI 私有状态** | **只读**，只报差异（禁止写） |
+- **校验**：8 项落库前校验（JSON 可解析 / 根键与 claude 段未变 / **模板含 catalog 行** / 上下文窗口覆盖 / slug 唯一…）→ 落库后回读 → 调 **Codex 本体**实测：
+  ```powershell
+  & "$env:USERPROFILE\.codemoss\dependencies\codex-sdk\node_modules\@openai\codex-win32-x64\vendor\x86_64-pc-windows-msvc\bin\codex.exe" debug models
+  ```
+  `debug models` 吐出**实际加载的完整模型目录 JSON**，逐条核 slug 与 display_name——唯一能证明"Codex 真认这份目录"的手段（`codex.exe` 不在 PATH 上）。
+- **Codex 侧坑位**：
+  - 🔴 **禁止外部写 `.codemoss\config.json`**：CCGUI（`idea-claude-code-gui` 插件）对 Codex 供应商盖了 `appliedProviderRevision` 的章（`CodexProviderManager.isProviderApplied`，MessageDigest）。外部改 `configToml` → 重算的 revision ≠ 记录的 revision → "已应用"失效；加上 `localConfigAuthorized:false` 就两态皆不可用 → 会话直接报 **「尚未配置 AI 供应商或未授权使用本地配置」**（`error.codexLocalAccessNotAuthorized`）。**要改模板一律在该插件 UI 里改，改完"保存/应用"让它自己盖章**。详见 `C:\Users\Administrator\.codemoss\CCGUI-Codex-配置注意项-2026-09-10.md`。
+  - **CCGUI 重写 live 配置的规律**（2026-09-10 实测）：按供应商模板重写 → `model` 行被扳回模板值、**所有注释丢失**，但未知键（`notify` / `mcp_servers` / `projects` / `hooks` / `model_catalog_json`）**是合并保留的**。所以在 live 里改 `model` 行或加注释都是白干。
+  - **备份别只放 `.codemoss`**：那目录归插件管，混进去的 `config.json.*` 容易和它自建的 `config.json.bak` 撞名；备份放 `~\.codex\` 等同级、插件不管的目录。（"插件会清 `.bak`"这条**未经证实**，别当事实。）
+  - CCGUI 供应商模板里必须有 `model_catalog_json` 行，否则你在 UI 里切一次供应商就会把这行刷掉，**Codex 立刻不读 models.json**（2026-09-10 已由用户在 UI 里补上）。
+  - **路径转义层数**：TOML 基本字符串里写 `\\`，嵌在 config.json 的 JSON 字符串里就是 4 个反斜杠；写错一层 Codex 就找不到目录（2026-09-10 实踩，脚本自检抓出）。
+  - `model_catalog_json` 是**整份替换**不是合并：文件里几条，Codex 就只剩几条选择。
+  - 字段缺省由 Codex 自己填（`input_modalities` 默认 `["text","image"]`）→ 非视觉模型若报图片相关错，再单独加 `input_modalities: ["text"]`，别批量猜。
+
 **坑位**
 - **两页口径不同**：`新` 徽章与限时倍数只在落地页 `/zh/go`，文档页只给基础值——只读文档页会把 V4.1 Flash 写成 6,500（实际促销 26,000）；
 - `deepseek-flash` 是 V4.1 Flash 的官方 id，显示名要写成 `deepseek-v4.1-flash`；
@@ -173,6 +208,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 | 12:46 / 18:38 | 前沿免费模型巡检（openrouter-go） | 自动收录，仅前沿档 |
 | 12:54 | 智谱巡检（zhipu / zhipu-htc） | 自动收录，只增不删 |
 | 13:02 | 百炼巡检（bailian） | 自动收录，只增不删 |
+| 13:10 | codex opencode-go 全量口径巡检（Codex 侧） | 自动落库（§8 Codex 侧同步：`~\.codex\models.json` + 兜底补 live 的 `model_catalog_json` 行；`.codemoss\config.json` 只读） |
 
 排班原则（红线，改动前先读）：
 
@@ -181,6 +217,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - **一天两次的需求拆成两个任务**：scheduler 单个任务一天只能有一个时刻（`kind: daily` 仅一个 `time`），所以"中午 + 晚上"= 两个任务，prompt 正文完全相同。
 - 高频任务锚点尽量压在空闲窗口内；落在高峰的那几轮只是 flash 输入价翻倍，差价每天几分钱，不值得为此牺牲频率。
 - 模型钉在任务上（`provider`/`model` 字段）：不吃 `agent-default-model`；opencode 巡检钉**别的渠道**，避免"套餐挂了连巡检都跑不动"的自证循环。
+- **Codex 侧那条（13:10）不写 `settings.yaml`、只读它** → 不受"2 分钟并发防护"约束（脚本内仍保留该防护，撞上就只出报告不落库）；必须排在 12:38 那轮之后，才能取到当天最新落库结果。它同样钉 `deepseek-official`：任务正文只读写 `~\.codex\models.json`（+ 兜底补 live 的 `model_catalog_json` 行），**一次都不碰 `.codemoss\config.json`**（CCGUI 私有状态，见 §8），也不碰 opencode-go 的 API。
 
 权限与护栏：必须 `danger-full-access`——任务要写会话工作区之外的 `~/.dsh/settings.yaml`，且无人值守没人批权限，`read-only`/`workspace-write` 会在落盘那步被拒。每次落库：备份 `settings.yaml.bak-<时间戳>` → 只改自己那段 models → YAML.parse 校验 → 任一不过立即回滚并报错停手。
 
