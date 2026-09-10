@@ -9,7 +9,7 @@
  *
  * 口径（红线）
  *   - 数据源唯一 = ~/.dsh/settings.yaml 的 llm-pi-ai.providers.opencode-go.models，本脚本不联网
- *   - 收录集合 = id 匹配 ^deepseek 或 ^glm 的条目（DeepSeek 全系 + GLM 全系）
+ *   - 收录集合 = id 匹配 ^(deepseek|glm) 且含 flash 的条目（只留 GLM flash + DeepSeek flash，Pro 及其它档用不起，2026-09-10 收紧）
  *   - slug = 官方 API id 原样；display_name = 照抄 DSH 的 name 整串（别名与 DSH 一致）
  *   - 排序 = 按 name 末尾「每5小时N次」的次数倒序，同次数按 settings.yaml 原序
  *   - 默认模型 = DeepSeek 系里次数最大的那一条的官方 id（codemoss 模板与 live config.toml 同时写，并加注释标记）
@@ -44,7 +44,8 @@ const CODEX_TOML = path.join(HOME, '.codex', 'config.toml');
 const CONCURRENCY_GUARD_MS = 2 * 60 * 1000;
 
 const DEFAULT_MODEL_FAMILY = /^deepseek/; // 默认模型只从 DeepSeek 系里挑
-const PICK = /^deepseek|^glm/;
+const PICK = /^(deepseek|glm)/i;          // 渠道家族：DeepSeek / GLM
+const FLASH_ONLY = /flash/i;              // 2026-09-10 收紧：只留 flash 档，Pro 及其它档用不起
 const CATALOG_DESCRIPTION = 'OpenCode Go 套餐接入；名称口径与 DSH settings.yaml 一致';
 const BASE_INSTRUCTIONS =
     'You are Codex, a precise coding agent. Complete tasks directly with minimal edits, ' +
@@ -140,10 +141,10 @@ const doc = YAML.parse(settingsRaw);
 const allModels = doc['llm-pi-ai'].providers['opencode-go'].models;
 const picked = allModels
     .map((m, i) => ({ ...m, _i: i, _n: tailCount(m.name) }))
-    .filter((m) => PICK.test(m.id))
+    .filter((m) => PICK.test(m.id) && FLASH_ONLY.test(m.id))
     .sort((a, b) => b._n - a._n || a._i - b._i);
 
-if (picked.length === 0) throw new Error('opencode-go 里没有命中 deepseek/glm 的条目，中止（疑似 settings.yaml 异常）');
+if (picked.length === 0) throw new Error('opencode-go 里没有命中 deepseek/glm 的 flash 条目，中止（疑似 settings.yaml 异常）');
 
 const defaultEntry = picked.filter((m) => DEFAULT_MODEL_FAMILY.test(m.id)).sort((a, b) => b._n - a._n)[0];
 if (!defaultEntry) throw new Error('DeepSeek 系里没有条目，无法确定默认模型，中止');
@@ -161,7 +162,7 @@ const markLine =
 
 log('=== 数据源 ===');
 log(SETTINGS, '| mtime =', settingsMtime.toLocaleString());
-log(`opencode-go 共 ${allModels.length} 条 → 命中 deepseek/glm ${picked.length} 条`);
+log(`opencode-go 共 ${allModels.length} 条 → 命中 deepseek/glm flash ${picked.length} 条`);
 picked.forEach((m, i) => log(`  ${String(i + 1).padStart(2)}. ${m.id.padEnd(30)} ${String(m._n).padStart(6)} 次/5h  ${m.name}`));
 log('默认模型（次数最大的 DeepSeek 档）=', DEFAULT_MODEL);
 log('标记注释 =', markLine);
