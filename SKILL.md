@@ -23,7 +23,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - 免费渠道保留：company-gateway（New API 类公司网关）、openrouter-go（auto/free/fusion 免费聚合档）——即"牛来那种免费"口径。
 - **非偏好系厂商/模型一律不主动加**，用户点名才加，加前照常查证。
 - 每次梳理以精简为先：同款模型多渠道重复时，只留最稳/最便宜的，其余列删除清单走确认流程。
-- 千问 flash 口径：bailian 只配 `qwen3.7-flash`（实测 200 通）。`qwen3.6-flash` 模型存在但免费额度已耗尽（403 insufficient_quota，需充值或控制台关闭 free-tier-only），额度恢复前不加回。
+- 千问 flash 口径：bailian 配 `qwen3.7-flash`（实测 200 通）+ `qwen3.8-flash`（2026-08-27 发布，见 §4）。`qwen3.6-flash` 模型存在但免费额度已耗尽（403 insufficient_quota，需充值或控制台关闭 free-tier-only），额度恢复前不加回。
 
 ## 安全红线（必读）
 
@@ -43,6 +43,12 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 ## 工作流程
 
 ### 1. 梳理现状
+- **第一步·最新 flash 巡视（每轮必做）**：按三条主力线逐线巡检"厂商是否出了更新的 flash 档"——
+  - DeepSeek 系：现配 `deepseek-v4-flash`（opencode-go 预览 / bailian 正式 / deepseek 官网 正式 三渠道），查证有无更新 flash；
+  - GLM 系：现配 `glm-5.3-flash`，查证有无更新代 flash（当前官方未披露，按"未查到"口径记录）；
+  - 千问系：现配 `qwen3.7-flash` + `qwen3.8-flash`，查证有无 qwen3.9-flash；
+  - 定式动作：① 本地 pi-ai 快照 diff（新 id 是否已进快照）→ ② web_search 多路（`<厂商> 最新 flash 模型 发布` / `<厂商> flash 免费额度` / `<厂商> 新模型 价格`）→ ③ 与已配列表 diff；
+  - 产出「候选追加清单」：模型 id / 参数量 / 价格 / 免费额度 / 有效期 / 建议动作，列给用户选，**仍走确认词流程落库，绝不自动写**；查证无新 flash 就明说"无新 flash"，本地目录 diff 优先、web 最多两路，不无限深挖。
 - 掩码 dump 全文件，列出每个 provider 的：模型 id、name、参数量后缀、版本标记。
 - 检查项：name 缺失 / 重复 id / 前缀不一致 / 参数量与版本标记是否规范 / 疑似该删的旧模型。
 
@@ -62,6 +68,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - kimi-k2.6=k2.7-code=1T/32B、minimax-m3=428B、minimax-m2.7=230B/10B
 - mimo-v2.5=311B/15B、mimo-v2.5-pro=1T/42B
 - qwen3.8-max=2.4T、qwen3.7-max≈1.2T（第三方，中置信）；qwen3.7-flash/plus、qwen3.6-plus 官方未披露
+- qwen3.8-flash（2026-08-27 发布，已核实）：多模态 MoE、上下文 1M、最大输出 128K；免费华北2（北京）100 万 tokens（开通百炼或模型发布起 90 天，以较晚者为准）；价格 输入 0.8 / 输出 2.7 / 缓存命中输入 0.1 元每百万（8/27 起下调）；参数量未披露。
 - OpenRouter 免费档：nemotron-3-nano-30b/nano-omni/super-120b/ultra-550b、gemma-4-26b/31b、gpt-oss-20b、north-mini-code=30B、laguna-m.1=225B/s-2.1=118B/xs-2.1=33B、ling-3.0-flash=124B；auto/openrouter/free/fusion 为聚合端点无参数量
 - sensenova-6.8-flash-lite 未披露。
 - 坑：qwen3.7-plus 曾把 Qwen3.5-35B-A3B 的 35B 串号写错——不同型号别混，比对时看全名。
