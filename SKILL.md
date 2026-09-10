@@ -160,6 +160,39 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - 用户可能自行改过文件：edit 前必须先 read；报"file changed since read"就重读再编辑。
 - 只改任务要求的，不顺手优化；尊重用户手改（如 displayName、去版本号命名）。
 
+### 10. 定时任务与巡检排班
+
+> 本节是 **2026-09-10 快照**；实档一律以 `~/.dsh/crons/tasks` 为准。**改过任务后顺手更新本节**，过期排班表会误导后来人。
+
+排班表（模型统一 `deepseek-official/deepseek-v4-flash`，权限一律 `danger-full-access`）：
+
+| 时间 | 任务 | 落库口径 |
+|---|---|---|
+| 12:30 | 官网巡检（llm-deepseek.models） | 自动收录，只增不删 |
+| 12:38 / 18:30 | opencode-go 全量口径巡检 | 自动落库（§8 全量镜像） |
+| 12:46 / 18:38 | 前沿免费模型巡检（openrouter-go） | 自动收录，仅前沿档 |
+| 12:54 | 智谱巡检（zhipu / zhipu-htc） | 自动收录，只增不删 |
+| 13:02 | 百炼巡检（bailian） | 自动收录，只增不删 |
+
+排班原则（红线，改动前先读）：
+
+- **跑在空闲窗口**：官网直连有峰谷价（周一至五 9-12、14-18 为高峰），排班全落在 12:00-14:00 与 18:00 之后 → 半价。
+- **错峰 ≥8 分钟 + 并发防护 2 分钟，两者必须配套**：同批任务都写同一个 `settings.yaml`，落盘前先看该文件 LastWriteTime，**不足 2 分钟就跳过本轮落库**（只出报告并写明"检测到并发写"）。若把错峰压到 2 分钟以内，或把防护窗口放大到 5 分钟以上，邻座任务会被误判并发而**集体白跑**。
+- **一天两次的需求拆成两个任务**：scheduler 单个任务一天只能有一个时刻（`kind: daily` 仅一个 `time`），所以"中午 + 晚上"= 两个任务，prompt 正文完全相同。
+- 高频任务锚点尽量压在空闲窗口内；落在高峰的那几轮只是 flash 输入价翻倍，差价每天几分钱，不值得为此牺牲频率。
+- 模型钉在任务上（`provider`/`model` 字段）：不吃 `agent-default-model`；opencode 巡检钉**别的渠道**，避免"套餐挂了连巡检都跑不动"的自证循环。
+
+权限与护栏：必须 `danger-full-access`——任务要写会话工作区之外的 `~/.dsh/settings.yaml`，且无人值守没人批权限，`read-only`/`workspace-write` 会在落盘那步被拒。每次落库：备份 `settings.yaml.bak-<时间戳>` → 只改自己那段 models → YAML.parse 校验 → 任一不过立即回滚并报错停手。
+
+维护方法：
+
+- scheduler **没有 update 工具**：改任务 = `scheduler_delete` + `scheduler_create`。
+- 核实**回读 `~/.dsh/crons/tasks`**（JSON 实档），别信回话：
+  ```powershell
+  node -e "const fs=require('fs');const a=JSON.parse(fs.readFileSync(process.env.USERPROFILE+'/.dsh/crons/tasks','utf8'));const r=Array.isArray(a)?a:(a.tasks||Object.values(a));r.forEach(t=>console.log([t.schedule&&(t.schedule.time||('每'+t.schedule.everyMinutes+'分')),t.name,'perm='+(t.permission||'默认'),'model='+((t.provider||'-')+'/'+(t.model||'默认'))].join(' | ')))"
+  ```
+- `scheduler_list` 工具当前有 bug（报 `invalid output: value is not lossless JSON`），核实用上面的实档回读。
+
 ## 已知坑位
 
 - dsh-defend 会拦截任何"带密钥样式"的工具结果与 edit 参数；tool 参数也要避免 `Bearer <token>` 同行。
