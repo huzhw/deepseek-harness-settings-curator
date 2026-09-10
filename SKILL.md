@@ -69,12 +69,14 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - mimo-v2.5=311B/15B、mimo-v2.5-pro=1T/42B
 - qwen3.8-max=2.4T、qwen3.7-max≈1.2T（第三方，中置信）；qwen3.7-flash/plus、qwen3.6-plus 官方未披露
 - qwen3.8-flash（2026-08-27 发布，已核实）：多模态 MoE、上下文 1M、最大输出 128K；免费华北2（北京）100 万 tokens（开通百炼或模型发布起 90 天，以较晚者为准）；价格 输入 0.8 / 输出 2.7 / 缓存命中输入 0.1 元每百万（8/27 起下调）；参数量未披露。
-- OpenRouter 免费档：nemotron-3-nano-30b/nano-omni/super-120b/ultra-550b、gemma-4-26b/31b、gpt-oss-20b、north-mini-code=30B、laguna-m.1=225B/s-2.1=118B/xs-2.1=33B、ling-3.0-flash=124B；auto/openrouter/free/fusion 为聚合端点无参数量
+- OpenRouter 免费档（2026-09-10 实时，按 `/api/v1/models` 的 `pricing=0` 筛出 21 个）：**前沿档只有 `thinkingmachines/inkling:free`**（付费孪生 $1/$4.05 每百万，1M 上下文 / 262K 输出，已配）；其余皆开源杂牌（nemotron-3-ultra-550b、3.5-lightning、super-120b、nano 系列、gemma-4-26b/31b、poolside laguna-s-2.1/xs-2.1、north-mini-code、lyria 音乐生成、content-safety 分类器、lfm-2.5-2.6b），按"不要垃圾"口径不收；`auto`/`openrouter/free`/`fusion` 为聚合端点无参数量。**旧清单已过期**：laguna-m.1、ling-3.0-flash、gpt-oss-20b、nemotron-3-nano-30b 的免费档已下架；OpenRouter 免费档**限 50 次/天、名单按月轮换**，不能当主力。
 - sensenova-6.8-flash-lite 未披露。
 - 坑：qwen3.7-plus 曾把 Qwen3.5-35B-A3B 的 35B 串号写错——不同型号别混，比对时看全名。
 
 ### 5. 限时免费模型
 - web_search 多路扫：`<厂商> 限时免费 模型 token 额度`、`新模型 免费公测`、`openrouter free models list`、`百炼 送 tokens`、`商汤 公测 免费`、`智谱 新模型 活动`、`deepseek 免费额度`。
+- **OpenRouter 实时清单（首选，比 web_search 准）**：用 node fetch `https://openrouter.ai/api/v1/models`，按 `pricing.prompt==0 && pricing.completion==0` 筛免费项；**前沿档判据 = 同族付费版 ≥$0.5/百万输入**（实例：`thinkingmachines/inkling:free` 付费版 $1/$4.05）；stealth 代号（ox/pony/korrine/omen 风格）+ 1M 上下文 + 图片/视频输入 = 白嫖前沿的信号。脚本写工作区 `_tmp\*.mjs` 再跑（curl 被策略代理挡）。
+- **牛来案例（2026-08）**：Ox Alpha（中文绰号"牛来"）= 智谱 GLM-5.3 Flash 匿名版——8/20 空降 OpenRouter，一周免费近乎无限额度、首日登顶用量榜，8/26 官方认领后转付费。**匿名前沿模型是"限时白嫖窗口"，靠巡检抢，不靠常驻清单**。
 - 评估：免费条件是否限时、适合挂哪个 provider、收费后是否保留。
 - 汇报格式：模型 / 免费条件 / 有效期 / 建议动作。
 
