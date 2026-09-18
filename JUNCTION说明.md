@@ -10,6 +10,7 @@
 | 全局路径（junction，DSH） | `C:\Users\Administrator\.dsh\skills\deepseek-harness-settings-curator` |
 | 全局路径（junction，Codex） | `C:\Users\Administrator\.codex\skills\deepseek-harness-settings-curator` |
 | 全局路径（junction，ZCode） | `C:\Users\Administrator\.zcode\skills\deepseek-harness-settings-curator` |
+| 全局路径（junction，Qoder） | `C:\Users\Administrator\.qoder\skills\deepseek-harness-settings-curator` |
 | 实际目录（F 仓库） | `F:\idea-workspase-skills\deepseek-harness-settings-curator` |
 
 ## 说明
@@ -25,6 +26,7 @@ cmd /c dir "C:\Users\Administrator\.claude\skills" | findstr deepseek-harness-se
 cmd /c dir "C:\Users\Administrator\.dsh\skills"    | findstr deepseek-harness-settings-curator
 cmd /c dir "C:\Users\Administrator\.codex\skills"  | findstr deepseek-harness-settings-curator
 cmd /c dir "C:\Users\Administrator\.zcode\skills"  | findstr deepseek-harness-settings-curator
+cmd /c dir "C:\Users\Administrator\.qoder\skills" | findstr deepseek-harness-settings-curator
 ```
 
 正常应显示 `<JUNCTION>  ...  deepseek-harness-settings-curator`。
@@ -36,6 +38,7 @@ rd "C:\Users\Administrator\.claude\skills\deepseek-harness-settings-curator"
 rd "C:\Users\Administrator\.dsh\skills\deepseek-harness-settings-curator"
 rd "C:\Users\Administrator\.codex\skills\deepseek-harness-settings-curator"
 rd "C:\Users\Administrator\.zcode\skills\deepseek-harness-settings-curator"
+rd "C:\Users\Administrator\.qoder\skills\deepseek-harness-settings-curator"
 ```
 
 > 注意：`rd` 不要加 `/s`，否则可能递归进 F 源目录。删除 junction 只删链接，不删 F 源目录。
