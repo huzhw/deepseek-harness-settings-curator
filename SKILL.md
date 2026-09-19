@@ -58,6 +58,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - 参数量：多源交叉（vLLM recipes、厂商公告、目录官方 name）；MoE 取总参；查不到不标。
 - 版本标记（仅 DeepSeek 系有预览/正式之分）：`/正式`（0731=Flash 正式版、0813=Pro 正式版、-ga- 日期=GA 正式）或 `/预览`（无后缀活接口、未切正式的渠道）。商汤的"服务公测免费"是活动不是模型版本。
 - 命名规范：`<前缀>/<模型id>/<参数量>(/<版本>)`；前缀约定：百炼 / 火山方舟 / 公司网关 / OpenCode / OpenRouter / 商汤日月新 / 智谱 / 官网（deepseek-official 官方直连）。
+- **模态红线（2026-09-19 定）**：`input:` 只允许 `text` / `image` 两个值——pi-ai 适配器 schema 的模态枚举就这两个；omni/音视频模型官方再宣传 audio/video 也不许声明，写了**整个 `llm-pi-ai` 分节会被拒载**、全渠道模型从选择器集体消失（2026-09-18 实踩：百炼巡检给 `qwen3.8-omni-flash` 写 `audio/video`，当天起 6 路由 42 模型全部不显示）。视觉口径 = `input: [text, image]`。
 
 ### 3. 清理旧模型
 - 识别依据：调用 404、厂商下架、免费变收费、重复条目。
@@ -152,9 +153,10 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 4. name 正则逐条 `^(新/)?(\d+倍用量/)?OpenCode/.+/每5小时(\d+|无限制)次(/限时)?$`（官方无预估的用 `无限制次`，限时档末尾补 `/限时`；确有其它例外须显式标注）；
 5. **排序单调性**：逐条解析 name 末尾的次数，序列必须**非递增**（排序键 = 显示值，促销值优先）——排错即判失败、还原备份；
 6. **路由骨架未被改动**：`opencode-go` 仍 `api: openai-completions` + baseURL `…/zen/go/v1`；`opencode-go-anthropic` 仍 `api: anthropic-messages` + baseURL `https://opencode.ai/zen/go`（无 `/v1`）+ 同 `apiKeyEnv`；任一被动过即判失败、还原备份；
-7. 落库前备份 `settings.yaml.bak-<时间戳>`，落库后回读打印全部 id/name（标明所属路由）供人工核。
+7. 落库前备份 `settings.yaml.bak-<时间戳>`，落库后回读打印全部 id/name（标明所属路由）供人工核；
+8. **pi-ai schema 校验（2026-09-19 加，必跑）**：`node "F:\idea-workspase-skills\deepseek-harness-settings-curator\scripts\pi-ai-schema-check.mjs"`，exit 1 = 分节会被拒载，立即还原备份——YAML.parse 只管语法，拦不住 `input` 超枚举这类 schema 拒载。
 
-**执行方式**：定时任务「opencode-go 全量口径巡检」按 §10 排班跑（B 模式自主落库：先备份 → 改 → 跑上面 1~7 项校验 → 任一失败即还原备份并报错）；人工梳理时并入 §1「最新 flash 巡视」同轮。
+**执行方式**：定时任务「opencode-go 全量口径巡检」按 §10 排班跑（B 模式自主落库：先备份 → 改 → 跑上面 1~8 项校验 → 任一失败即还原备份并报错）；人工梳理时并入 §1「最新 flash 巡视」同轮。
 
 **Codex 侧同步（models.json 归我们 + CCGUI 模板归插件）**——2026-09-10 起由定时任务「codex opencode-go 全量口径巡检」（13:10）每轮执行
 
@@ -203,10 +205,14 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - 任何改动前：**分析 → 方案结尾带四字成语确认词 → 等用户回确认词才动手**（"行/好/确认"等不算）。
 - 改 agent-default-model 前**先备份两个 profile 的 cordis.patch.yml**（`Copy-Item <file> cordis.patch.yml.bak-<时间戳>`）。
 - 多个方案列出来让用户选，不替用户做主。
-- 改后校验（工作目录放 DSH checkout，yaml 依赖在 node_modules）：
+- 改后校验（两道，任一不过立即回滚）：
   ```powershell
+  # ① 语法：YAML.parse（工作目录放 DSH checkout，yaml 依赖在 node_modules）
   node -e "const fs=require('fs');const YAML=require('yaml');const doc=YAML.parse(fs.readFileSync(process.env.USERPROFILE+'/.dsh/settings.yaml','utf8'));console.log('YAML_OK')"
+  # ② schema（2026-09-19 加，必跑，任意目录可跑）：引擎自带 Config 真 schema 校验 llm-pi-ai / llm-deepseek 两分节
+  node "F:\idea-workspase-skills\deepseek-harness-settings-curator\scripts\pi-ai-schema-check.mjs"
   ```
+  只跑①是 2026-09-18 事故根因之一：语法全对但 `input` 声明 `audio/video` 超枚举 → 整个 `llm-pi-ai` 分节被拒载、全渠道模型消失。
 - 用户可能自行改过文件：edit 前必须先 read；报"file changed since read"就重读再编辑。
 - 只改任务要求的，不顺手优化；尊重用户手改（如 displayName、去版本号命名）。
 
@@ -238,7 +244,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - 模型钉在任务上（`provider`/`model` 字段）：不吃 `agent-default-model`；opencode 巡检钉**别的渠道**，避免"套餐挂了连巡检都跑不动"的自证循环。
 - **Codex 侧那条（13:10）不写 `settings.yaml`、只读它** → 不受"2 分钟并发防护"约束（脚本内仍保留该防护，撞上就只出报告不落库）；必须排在 12:38 那轮之后，才能取到当天最新落库结果。它同样钉 `deepseek-official`：任务正文只读写 `~\.codex\models.json`（+ 兜底补 live 的 `model_catalog_json` 行），**一次都不碰 `.codemoss\config.json`**（CCGUI 私有状态，见 §8），也不碰 opencode-go 的 API。
 
-权限与护栏：必须 `danger-full-access`——任务要写会话工作区之外的 `~/.dsh/settings.yaml`，且无人值守没人批权限，`read-only`/`workspace-write` 会在落盘那步被拒。每次落库：备份 `settings.yaml.bak-<时间戳>` → 只改自己那段 models → YAML.parse 校验 → 任一不过立即回滚并报错停手。
+权限与护栏：必须 `danger-full-access`——任务要写会话工作区之外的 `~/.dsh/settings.yaml`，且无人值守没人批权限，`read-only`/`workspace-write` 会在落盘那步被拒。每次落库：备份 `settings.yaml.bak-<时间戳>` → 只改自己那段 models → YAML.parse + `pi-ai-schema-check.mjs` schema 校验（见 §9，2026-09-19 加）→ 任一不过立即回滚并报错停手。
 
 维护方法：
 
@@ -262,3 +268,4 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - dsh-auto-review 审查器 fork 继承会话路由：换默认模型 = 主代理+审查器同时换渠道，反之亦然。
 - zhipu key 明文在 settings.yaml；dsh-defend 拦 `sk-`/Bearer 样式，写带 key 配置用"Authorization: Bearer 换行缩进下一行"写法。
 - Windows 沙箱受限令牌下 curl 的 schannel 报 `SEC_E_NO_CREDENTIALS`（TLS 挂），抓 https 用 node fetch 更稳；node 脚本写工作区 `_tmp\` 再跑，避免 shell 引号转义。
+- **`input:` 模态枚举只有 text/image（2026-09-18 实踩）**：百炼巡检给 omni 模型写 `audio/video` → 整个 `llm-pi-ai` 分节被 schema 拒载 → 6 路由 42 模型从选择器消失且**无报错弹窗**（进程内存留最后有效值，重启才暴露）。YAML.parse 查不出，必须跑 §9 的 schema 校验脚本。
