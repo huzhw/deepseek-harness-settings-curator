@@ -111,35 +111,50 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 ### 8. opencode-go 渠道（OpenCode Go 套餐 · 订阅全量渠道）
 
 **口径（红线，与官网/智谱/百炼不是一套逻辑）**
-- 定位：OpenCode Go 订阅渠道（$10/月、$100 用量，仅订阅用户可用）；baseURL `https://opencode.ai/zen/go/v1`；路由 `opencode-go/<模型id>`。
+- 定位：OpenCode Go 订阅渠道（$10/月、$100 用量，仅订阅用户可用）；**按线上协议拆两条路由**（2026-09-17 定，见下方「协议分路由」）：`opencode-go`（`api: openai-completions`、baseURL `https://opencode.ai/zen/go/v1`）与 `opencode-go-anthropic`（`api: anthropic-messages`、baseURL `https://opencode.ai/zen/go`，**不带 `/v1`**——适配器自动补 `/v1/messages`）。
 - **全量收录**：官方「当前支持的模型列表」里的模型**一个不落**，只增不减（官方下架才删）；**不做三线口味精简、不跨渠道去重、不与官网/智谱/百炼合并口径**。
 - **命名**：`[新/][N倍用量/]OpenCode/<显示名>/<参数量?>(/<版本?>)/每5小时N次`
   - **标记区前置**：官方「新」徽章拼 `新/`、落地页限时倍数拼 `N倍用量/`，两者都放在 `OpenCode` **前边**（都有则 `新/4倍用量/OpenCode/…`；只有一个就只拼那个；都没有则省略）；
   - **显示名带版本**（DeepSeek V4.1 Flash → `deepseek-v4.1-flash`）；**id 用官方 API id**（V4.1 Flash 的官方 id 是 `deepseek-flash`，官方命名不跟版本走）；
+  - **name 里的〈显示名〉一律取官方显示名，禁止拿 API id 顶替**（2026-09-17 实踩：`union-alpha` 的官方显示名是 **Union Alpha Free**，巡检把 id 当显示名写成 `新/OpenCode/union-alpha/每5小时无限制次` → 用户看不出这是哪个模型；正确写法 `新/OpenCode/Union Alpha Free/每5小时无限制次/限时`）。落地页/文档页显示什么就照抄什么（含 `Free`/`Preview`/`Experimental` 这类后缀），只把空格按需保留、大小写照官方；
+  - 官方没给「N 次」预估的写 `每5小时无限制次`；**限时供应/限时免费**的档在末尾补 `/限时`（如 union-alpha）；
   - 参数量只标 §4 已核实数字，未披露不标；
   - 调用次数**中文标注、拼名字末尾**；整表按**显示值**（name 里那个次数，**促销值优先**，如 V4.1 Flash 用 26000 而非基础 6500）**倒序**；标记区（`新/`、`N倍用量/`）只随行移动、不参与排序；同次数按官方表原序。
 - 三窗口（官方）：**每 5 小时 = 月限 20%、每周 50%、每月 100%**；预估请求数表按典型每请求 token 假设推算（如 deepseek-v4-flash 每次 410 输入 + 71,300 缓存 + 310 输出 token）。
 
+**协议分路由（2026-09-17 定，红线）**
+- **协议（`api`）是路由级，模型级覆盖不了**：一个 provider 只能有一种线上协议，模型级只认 `name/contextWindow/maxTokens/input/reasoningEfforts/compat`。所以同渠道里走不同协议的模型**必须拆成不同路由**，不能只改某个模型的 `api`。
+- **归属判据 = 官方端点表**：文档页的端点表（`/v1/messages` vs `/v1/chat/completions`）是唯一判据；`/zen/go/v1/models` 只返回 `id/object/created/owned_by`，**没有协议字段**，别指望它。挂 `/v1/messages`（Anthropic SDK）的进 `opencode-go-anthropic`，其余进 `opencode-go`。2026-09-17 时 messages 侧 = `union-alpha` 一条（官方标注限时免费）。
+- **新增模型必过双探针**（**只测新增**，旧模型不复扫——全量重测是白烧钱；旧模型仅在真报 4xx/5xx 时按错误驱动单条复检）：对候选模型各发一次最小请求（`max_tokens: 16`、45s 超时、**必带 `x-opencode-session` 头**），`/chat/completions` 与 `/v1/messages` 各一次：
+  - 两路都 200 → 归主路由 `opencode-go`（网关对老模型宽容，两路都能通属正常，按文档页端点表定归属）；
+  - **只有 `/v1/messages` 200、`/chat/completions` 5xx** → 归 `opencode-go-anthropic`（2026-09-17 实测 union-alpha 走 chat/completions 报 `500 Internal server error`，走 messages 200）；
+  - 探针命令与原始响应摘要要写进巡检报告。
+- **路由键必须登记进会话头插件**：`profiles/web/cordis.patch.yml` 的 `opencode-go-session-header` 行 `providers` 要含**所有** opencode 系路由键（现为 `opencode` / `opencode-go` / `opencode-go-anthropic`）。漏登记 → 上游 400 `MissingSessionID`。**改了要重启 dsh 才生效**（插件 config 只在启动时读）。会话头由 `dsh-opencode-session` 插件按路由键注入，2026-09-05 起上游强制要求。
+- **巡检只重建 models，不删路由**：`opencode-go-anthropic` 的 `api`/`baseURL`/`apiKeyEnv`/`displayName` 与注释，巡检一律不动；它只按上面的判据维护里面该放哪些模型。反过来，重建 `opencode-go` 时**必须把 messages 侧模型排除**，不许因为「官方列表里有」就写回主路由——写回即该条调用 500（chat/completions 对 messages-only 模型是稳定 500，带不带会话头都一样，2026-09-17 复测）。
+- **上游间歇 503（2026-09-17 实测，不是配置问题）**：union-alpha 后端池约 1/3 概率**秒回** 503 `Endpoint is unavailable`，**成片出现**（坏窗口持续几分钟~几十分钟，同一请求过几分钟就通）；与 system 大小 / tools / max_tokens(≤32K) / 鉴权头样式（x-api-key 或双发）均无关。缺会话头是另一回事（400 `MissingSessionID`）。**别把 503 当配置错误去乱改路由**。缓解：装 `dsh-llm-retry` 插件 + 路由 `retryPolicy`（SERVER 属默认可重试码，默认 maxRetries=5、500ms 起指数退避）；没插件时就人工重发一次。
+
 **抓取逻辑（优先级严格，每轮两页都抓）**
-1. **文档页** https://opencode.ai/zh/docs/go/（公开、月更、web_fetch）——**权威列 = 「当前支持的模型列表」**；价格表/端点表/基础预估表作辅助；
+1. **文档页** https://opencode.ai/zh/docs/go/（公开、月更、web_fetch）——**权威列 = 「当前支持的模型列表」**；价格表/基础预估表作辅助；**端点表是协议归属的唯一判据**（见上「协议分路由」），但它同样含陈旧残留行 → 只用来判协议、不用来判收录；
 2. **落地页** https://opencode.ai/zh/go——取文档页没有的两类信息：**「新」徽章（新模型）**与**限时倍数用量**（实例：DeepSeek V4.1 Flash「限时享受 4 倍使用额度」，6,500 → **26,000** 请求/5 小时、月限 $15 → $60）；
 3. **取值规则**：带限时促销的模型取**落地页促销值**（26,000），并在 name 前置 `N倍用量/` 标记；促销结束、落地页回落基础值时，巡检自动改回基础值并去掉该标记；
-4. `/zen/go/v1/models`（需订阅鉴权，尽力抓；401/无权限就跳过并说明）；
+4. `/zen/go/v1/models`（需订阅鉴权，尽力抓；401/无权限就跳过并说明）——**只用来比对 id 集合，拿不到协议**；
 5. 文档页价格表与端点表**有陈旧残留行**（实例：MiniMax M2.5 有价格行、有端点行，但不在支持列表 → **不收录**）；与①冲突**一律以①为准**；
 6. 抓不到 → 报「页面结构变化或抓取失败」，**绝不编造**；字段缺失写「未查到」。
 
 **生成**
-- 按口径产出完整 `llm-pi-ai.providers.opencode-go.models` 块（YAML，`- id:` 8 空格、`name:` 10 空格缩进）。
+- 按口径产出**两条路由的 models 块**：`llm-pi-ai.providers.opencode-go.models`（chat/completions 侧）与 `llm-pi-ai.providers.opencode-go-anthropic.models`（messages 侧，通常 1~2 条）；YAML 同级缩进，`- id:` 8 空格、`name:` 10 空格。
+- **同一个 id 只许出现在一条路由里**：两路由并集 = 官方支持列表，交集 = ∅。
 
 **校验（必须全过，任一不过即回滚并报错，不静默）**
 1. `YAML.parse` 通过；
-2. **id 集合双向 diff**：官方列表 − 配置 = ∅ **且** 配置 − 官方 = ∅；
-3. 条数比对：官方 N = 配置 N；
-4. name 正则逐条 `^(新/)?(\d+倍用量/)?OpenCode/.+/每5小时\d+次$`（官方无预估的须显式标注为例外）；
+2. **id 集合双向 diff（两路由并集）**：官方列表 −（`opencode-go` ∪ `opencode-go-anthropic`）= ∅ **且** 并集 − 官方 = ∅，且并集内**无重复 id**；
+3. 条数比对：官方 N = 两条路由条数之和；
+4. name 正则逐条 `^(新/)?(\d+倍用量/)?OpenCode/.+/每5小时(\d+|无限制)次(/限时)?$`（官方无预估的用 `无限制次`，限时档末尾补 `/限时`；确有其它例外须显式标注）；
 5. **排序单调性**：逐条解析 name 末尾的次数，序列必须**非递增**（排序键 = 显示值，促销值优先）——排错即判失败、还原备份；
-6. 落库前备份 `settings.yaml.bak-<时间戳>`，落库后回读打印全部 id/name 供人工核。
+6. **路由骨架未被改动**：`opencode-go` 仍 `api: openai-completions` + baseURL `…/zen/go/v1`；`opencode-go-anthropic` 仍 `api: anthropic-messages` + baseURL `https://opencode.ai/zen/go`（无 `/v1`）+ 同 `apiKeyEnv`；任一被动过即判失败、还原备份；
+7. 落库前备份 `settings.yaml.bak-<时间戳>`，落库后回读打印全部 id/name（标明所属路由）供人工核。
 
-**执行方式**：定时任务「opencode-go 全量口径巡检」每 5 小时按本节跑（B 模式自主落库：先备份 → 改 → 跑上面 1~4 项校验 → 任一失败即还原备份并报错）；人工梳理时并入 §1「最新 flash 巡视」同轮。
+**执行方式**：定时任务「opencode-go 全量口径巡检」按 §10 排班跑（B 模式自主落库：先备份 → 改 → 跑上面 1~7 项校验 → 任一失败即还原备份并报错）；人工梳理时并入 §1「最新 flash 巡视」同轮。
 
 **Codex 侧同步（models.json 归我们 + CCGUI 模板归插件）**——2026-09-10 起由定时任务「codex opencode-go 全量口径巡检」（13:10）每轮执行
 
@@ -197,14 +212,18 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 
 ### 10. 定时任务与巡检排班
 
-> 本节是 **2026-09-10 快照**；实档一律以 `~/.dsh/crons/tasks` 为准。**改过任务后顺手更新本节**，过期排班表会误导后来人。
+> 本节是 **2026-09-10 快照**（2026-09-17 复核过任务存放位置）。**改过任务后顺手更新本节**，过期排班表会误导后来人。
+>
+> **任务实档在哪（2026-09-17 实测）**：桌面端「定时任务」面板的调度器由插件 `dsh-tauri-panel-scheduler` 提供，宿主存储 + HTTP 接口 `/api/desktop/dsh-tauri-panel-scheduler/tasks`（GET/POST/PUT/DELETE，另 `/tasks/toggle`、`/tasks/run`、`/history`、`/options`、`/runs/recover`）；任务会话的工作目录固定是 `~/.dsh/automations`（插件常量 `SCHEDULER_UNGROUPED_DIRECTORY`，巡检的临时脚本也落这里）。
+> - 引擎自带调度器（`scheduler_create`/`scheduler_list` 等工具读写的那个）是**另一套**：实档 `~/.dsh/crons/tasks`，**2026-09-15 起为 `{"version":1,"tasks":[]}`**；`scheduler_list` 查的也是它 → 会误报「当前没有定时任务」。
+> - 2026-09-17 实测的怪象：面板 API 返回 `{"tasks":[]}`、全盘也搜不到任何含 `nextRunAt`/`lastRunAt` 的任务实档，**但当天 12:38/12:46 与 18:30/18:38 的巡检照跑**（现场在 `~/.dsh/storages/session_projcache/sessions/` 的 `task-*.json` / `session-*.json`）→ 那批任务只活在**运行中进程的内存里**，重启即失。**要让巡检继续跑，必须在面板里把任务重建出来**（重建才落库）。
 
 排班表（模型统一 `deepseek-official/deepseek-v4-flash`，权限一律 `danger-full-access`）：
 
 | 时间 | 任务 | 落库口径 |
 |---|---|---|
 | 12:30 | 官网巡检（llm-deepseek.models） | 自动收录，只增不删 |
-| 12:38 / 18:30 | opencode-go 全量口径巡检 | 自动落库（§8 全量镜像） |
+| 12:38 / 18:30 | opencode-go 全量口径巡检 | 自动落库（§8 全量镜像；**2026-09-17 起拆 `opencode-go` + `opencode-go-anthropic` 两条路由，`union-alpha` 归 anthropic 侧**） |
 | 12:46 / 18:38 | 前沿免费模型巡检（openrouter-go） | 自动收录，仅前沿档 |
 | 12:54 | 智谱巡检（zhipu / zhipu-htc） | 自动收录，只增不删 |
 | 13:02 | 百炼巡检（bailian） | 自动收录，只增不删 |
@@ -223,12 +242,15 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 
 维护方法：
 
-- scheduler **没有 update 工具**：改任务 = `scheduler_delete` + `scheduler_create`。
-- 核实**回读 `~/.dsh/crons/tasks`**（JSON 实档），别信回话：
+- **面板调度器（实际在跑的那套）**：任务在 GUI「定时任务」页管理；程序化读写走 `/api/desktop/dsh-tauri-panel-scheduler/tasks`（**有 PUT，改正文不用删了重建**）：
   ```powershell
-  node -e "const fs=require('fs');const a=JSON.parse(fs.readFileSync(process.env.USERPROFILE+'/.dsh/crons/tasks','utf8'));const r=Array.isArray(a)?a:(a.tasks||Object.values(a));r.forEach(t=>console.log([t.schedule&&(t.schedule.time||('每'+t.schedule.everyMinutes+'分')),t.name,'perm='+(t.permission||'默认'),'model='+((t.provider||'-')+'/'+(t.model||'默认'))].join(' | ')))"
+  xh get :13080/api/desktop/dsh-tauri-panel-scheduler/tasks               # 列任务（含 prompt 全文）
+  xh put :13080/api/desktop/dsh-tauri-panel-scheduler/tasks id=<任务id> prompt=<新正文>   # 改正文
+  xh post :13080/api/desktop/dsh-tauri-panel-scheduler/tasks/run id=<任务id>              # 立即干跑一次
   ```
-- `scheduler_list` 工具当前有 bug（报 `invalid output: value is not lossless JSON`），核实用上面的实档回读。
+  改完**回读确认**，别信回话。
+- **引擎自带调度器**：没有 update 工具，改任务 = `scheduler_delete` + `scheduler_create`；实档 `~/.dsh/crons/tasks`（**2026-09-15 起为空**，`scheduler_list` 查的也是它，别当真相）。
+- 判断「某轮巡检到底跑了没」：看 `~/.dsh/storages/session_projcache/sessions/` 里 `task-*.json`（旧引擎档）或 `session-*.json`（面板档，`cwd` = `~/.dsh/automations`）的 LastWriteTime 与首条 user message——比任何自述都可靠。
 
 ## 已知坑位
 
