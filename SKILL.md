@@ -170,6 +170,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
   # 调试：--emit <目录> 导出"应然产物"做 diff；--force 忽略并发防护
   # ⚠️ --write-codemoss 会写 .codemoss\config.json —— 默认关闭，非必要别开（2026-09-10 事故成因）
   ```
+- **本体实测必须带 `CODEX_HOME`（2026-09-23 实踩）**：`codex.exe` 0.155.1 起**不认 `USERPROFILE`/`HOME`**，按 Windows 用户档案解析 home；面板巡检跑在 LocalSystem 会话里 → 落到 `systemprofile` → 实测读到内置 9 条 gpt-*、3 项假 FAIL（落库其实是成功的）。脚本已改成 `execFileSync` 显式传 `CODEX_HOME=<HOME>\.codex`，实测 4 条与补丁目录逐条 MATCH。
 - **口径**（与 DSH 的 §8 全量口径不是一套）：
   - 收录集合 = 补丁 `- id: llm-pi-ai` 条目 `config.providers.opencode-go.models` 里 **id 匹配 `^deepseek` 或 `^glm`** 的条目（DeepSeek 全系 + GLM 全系，2026-09-10 为 8 条）；其余渠道内模型（mimo / kimi / minimax / qwen / hy / grok / longcat / omen / muse-spark / gpt-*）**一律不进 Codex 清单**。
   - `slug` = 官方 API id **原样**（V4.1 Flash 的 slug 是 `deepseek-flash`）；**`display_name` = 照抄 DSH 的 `name` 整串**（别名与 DSH 一致，带 `新/`、`N倍用量/` 标记与次数）；排序 = 按 name 末尾次数倒序，同次数按补丁原序。

@@ -430,10 +430,18 @@ if (!exe) {
     log('⚠ 未找到 codex.exe，跳过 Codex 本体实测（请手工确认模型列表）');
     process.exit(0);
 }
+// 2026-09-23：codex.exe 0.155.1 起不认 USERPROFILE/HOME，按 Windows 用户档案解析 home；
+// 面板服务跑在 LocalSystem 会话里，不显式钉 CODEX_HOME 就会解析到 systemprofile，
+// 实测加载的是内置目录（3 项假 FAIL、脚本退出码 1，但落库本身成功）。
+const codexHome = path.join(HOME, '.codex');
 log('--- Codex 本体实测:', exe);
+log('    CODEX_HOME =', codexHome);
 let rawOut = '';
 try {
-    rawOut = execFileSync(exe, ['debug', 'models'], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+    rawOut = execFileSync(exe, ['debug', 'models'], {
+        encoding: 'utf8', maxBuffer: 32 * 1024 * 1024,
+        env: { ...process.env, CODEX_HOME: codexHome }
+    });
 } catch (err) {
     log('✗ codex debug models 执行失败:', err.message);
     process.exit(1);
