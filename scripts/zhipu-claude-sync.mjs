@@ -193,7 +193,7 @@ const preChecks = {
     '四别名 = flash 选档且不含 Pro/口径外 id': ALIAS_KEYS.every((k) => nextEnv[k] === target) &&
         !/pro/i.test(target) && flashIds.has(target.replace(/\[1m\]$/, '')),
     '端点正确': nextEnv.ANTHROPIC_BASE_URL === BASE_URL,
-    'span 外逐字节未动': next.slice(0, open) === cfgRaw.slice(0, open) && next.slice(close + 1) === cfgRaw.slice(close + 1),
+    'span 外逐字节未动': next.slice(0, open) === cfgRaw.slice(0, open) && next.slice(open + span.length) === cfgRaw.slice(close + 1),
     '目标 span 只变了预期行': keys.length === 0 || span !== before
 };
 log('--- 落库前校验 ---');
