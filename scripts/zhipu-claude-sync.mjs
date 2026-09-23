@@ -9,7 +9,7 @@
  *   - token 模板里已有值一律不动（用户手配）；空值直接报错让人工在 CCGUI 里配
  *
  * 口径（红线）
- *   - 数据源唯一 = ~/.dsh/settings.yaml 的 llm-pi-ai.providers.zhipu.models，本脚本不联网
+ *   - 数据源唯一 = <DSH_HOME>/profiles/web/cordis.patch.yml 里 - id: llm-pi-ai 条目 config.providers.zhipu.models，本脚本不联网
  *     （zhipu 与 zhipu-htc 两账号模型集合由 glm-智谱巡检保证一致，这里只读主账号）
  *   - 别名值只能取当前口径内的 glm flash id：口径删掉的必须同步从别名清掉，
  *     宁可四别名重合，不准留口径外死 id；Pro 系与预览/实验档不进别名
@@ -19,7 +19,7 @@
  *
  * 用法
  *   node zhipu-claude-sync.mjs            预览（零写入）
- *   node zhipu-claude-sync.mjs --apply    备份后落库（并发防护：settings.yaml 2 分钟内被写过则跳过）
+ *   node zhipu-claude-sync.mjs --apply    备份后落库（并发防护：cordis.patch.yml 2 分钟内被写过则跳过）
  *   node zhipu-claude-sync.mjs --apply --force   忽略并发防护
  *
  * 退出码：0 = 成功（含"无变化"与"并发跳过"）；1 = 校验失败或被插件回写冲掉
@@ -33,7 +33,10 @@ const APPLY = process.argv.includes('--apply');
 const FORCE = process.argv.includes('--force');
 const HOME = os.homedir();
 
-const SETTINGS = path.join(HOME, '.dsh', 'settings.yaml');
+// 配置真源(2026-09-23 起):<DSH_HOME>/profiles/web/cordis.patch.yml。
+// 新版 DSH(0.1.7+)启动时把 ~/.dsh/settings.yaml 一次性导入各 profile 补丁并改名 settings.yaml.imported,
+// 旧文件已不存在 —— 这里必须锚新落点,否则脚本一律读空、直接中止(2026-09-23 实测)。
+const DSH_CONFIG = path.join(HOME, '.dsh', 'profiles', 'web', 'cordis.patch.yml');
 const CODEMOSS = path.join(HOME, '.codemoss', 'config.json');
 const BACKUP_DIR = path.join(HOME, '.dsh', 'backup', 'ccgui-claude');
 const PROVIDER_ID = '655afdfe-a637-414a-9969-9d4f5dd4086d'; // claude 段里 name = 智谱GLM官网 的记录
@@ -58,7 +61,7 @@ function loadYaml() {
     for (const c of cands) {
         if (fs.existsSync(c)) return createRequire(c)('yaml');
     }
-    throw new Error('找不到 DSH checkout 里的 yaml 依赖，无法解析 settings.yaml');
+    throw new Error('找不到 DSH checkout 里的 yaml 依赖，无法解析 DSH 配置补丁');
 }
 
 /** 从 startIdx 起找配对的大括号区间（跳过字符串内括号） */
@@ -84,13 +87,30 @@ function objectSpan(text, startIdx) {
     throw new Error('大括号不配对');
 }
 
+/**
+ * 新版 DSH 的配置真源是 profile 补丁(顶层 = 条目数组 [{id, config}]),
+ * 旧 settings.yaml 是顶层段映射。统一折算成"段名 → 条目对象",下游取数逻辑不必分叉。
+ */
+function sectionsOf(root) {
+    if (!Array.isArray(root)) return root;
+    const out = {};
+    const take = (e) => {
+        if (e && e.id && !(e.id in out)) out[e.id] = e;
+    };
+    for (const e of root) {
+        if (e && Array.isArray(e.insert)) e.insert.forEach(take);
+        else take(e);
+    }
+    return out;
+}
+
 // ---------------------------------------------------------------- 1. 读数据源
-const settingsRaw = fs.readFileSync(SETTINGS, 'utf8');
-const settingsMtime = fs.statSync(SETTINGS).mtime;
-const doc = loadYaml().parse(settingsRaw);
-const models = doc?.['llm-pi-ai']?.providers?.zhipu?.models;
+const settingsRaw = fs.readFileSync(DSH_CONFIG, 'utf8');
+const settingsMtime = fs.statSync(DSH_CONFIG).mtime;
+const doc = sectionsOf(loadYaml().parse(settingsRaw));
+const models = doc?.['llm-pi-ai']?.config?.providers?.zhipu?.models;
 if (!Array.isArray(models) || models.length === 0) {
-    throw new Error('settings.yaml 里 llm-pi-ai.providers.zhipu.models 为空/缺失，中止（疑似口径异常）');
+    throw new Error('cordis.patch.yml 里 - id: llm-pi-ai 条目 config.providers.zhipu.models 为空/缺失，中止（疑似口径异常）');
 }
 
 // 选 flash 档：排除 Pro 与预览/实验档；多个候选时取 id 版本号最大的（5.3 > 5.2 > 5.1）
@@ -105,7 +125,7 @@ const flashIds = new Set(flashCandidates.map((m) => m.id));
 if (!flashIds.has(FLASH.id)) throw new Error('flash 选档自检失败，中止');
 
 log('=== 数据源 ===');
-log(SETTINGS, '| mtime =', settingsMtime.toLocaleString());
+log(DSH_CONFIG, '| mtime =', settingsMtime.toLocaleString());
 log(`智谱 zhipu 共 ${models.length} 条 → flash 可用 ${flashCandidates.length} 条（Pro/预览已排除）`);
 log('flash 选档 =', FLASH.id, '（', FLASH.name, '）');
 
@@ -190,7 +210,7 @@ if (keys.length === 0) { log('无变化，不写盘。'); process.exit(0); }
 // ---------------------------------------------------------------- 5. 并发防护 + 写入 + 回读
 const since = Date.now() - settingsMtime.getTime();
 if (!FORCE && since < GUARD_MS) {
-    log(`检测到并发写：settings.yaml ${Math.round(since / 1000)} 秒前被写过（<2 分钟），本轮跳过落库，只出报告。`);
+    log(`检测到并发写:cordis.patch.yml ${Math.round(since / 1000)} 秒前被写过（<2 分钟），本轮跳过落库，只出报告。`);
     process.exit(0);
 }
 

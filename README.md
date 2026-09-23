@@ -1,8 +1,8 @@
-# settings.yaml 模型配置梳理
+# DSH 模型配置梳理（profile 补丁版）
 
-> **适用平台：DeepSeek Harness（DSH）** —— 维护 `C:\Users\Administrator\.dsh\settings.yaml`。DSH 消费端（`~/.dsh/skills`）为第一使用场景，同时兼容挂载到 Claude Code 技能目录。
+> **适用平台：DeepSeek Harness（DSH）** —— 维护 `C:\Users\Administrator\.dsh\profiles\web\cordis.patch.yml`（新版 DSH 的配置真源；旧的 `~/.dsh/settings.yaml` 已在 2026-09-23 随 0.1.7+ 升级退役：启动时被一次性导入补丁后改名 `settings.yaml.imported`）。DSH 消费端（`~/.dsh/skills`）为第一使用场景，同时兼容挂载到 Claude Code 技能目录。
 
-定期维护 `C:\Users\Administrator\.dsh\settings.yaml` 的 LLM 供应商模型配置：追加新模型、清理旧模型、参数量与版本对齐、找限时免费模型。
+定期维护 profile 补丁里的 LLM 供应商模型配置：追加新模型、清理旧模型、参数量与版本对齐、找限时免费模型。
 
 ## 相关技能
 
@@ -20,7 +20,7 @@
 
 ## 解决了什么问题
 
-settings.yaml 是 DSH 所有 LLM 供应商的配置源（key 明文），模型一多就乱：
+`profiles/web/cordis.patch.yml` 是 DSH 所有 LLM 供应商的配置源（密钥只以 `apiKeyEnv` 引变量名，明文在 `~/.dsh/.credentials.yaml`），模型一多就乱：
 
 - 新模型上线（GLM-5.3、DeepSeek V4 正式版…）不知道该不该加、加哪个 id
 - 旧模型 404 / 下架 / 免费变收费没人管
@@ -40,7 +40,7 @@ settings.yaml 是 DSH 所有 LLM 供应商的配置源（key 明文），模型�
 
 ## 使用
 
-触发词（任选）：`梳理配置`、`梳理模型`、`追加模型`、`清理模型`、`限时免费`、`参数对齐`、`settings.yaml`。
+触发词（任选）：`梳理配置`、`梳理模型`、`追加模型`、`清理模型`、`限时免费`、`参数对齐`、`cordis.patch.yml`、`settings.yaml`。
 
 ## 安全性
 

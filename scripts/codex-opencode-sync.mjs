@@ -8,16 +8,16 @@
  *   ③ ~/.codex/config.toml            live 配置：默认模型行 + model_catalog_json 行兜底
  *
  * 口径（红线）
- *   - 数据源唯一 = ~/.dsh/settings.yaml 的 llm-pi-ai.providers.opencode-go.models，本脚本不联网
+ *   - 数据源唯一 = <DSH_HOME>/profiles/web/cordis.patch.yml 里 - id: llm-pi-ai 条目 config.providers.opencode-go.models，本脚本不联网
  *   - 收录集合 = id 匹配 ^(deepseek|glm) 且含 flash 的条目（只留 GLM flash + DeepSeek flash，Pro 及其它档用不起，2026-09-10 收紧）
  *   - slug = 官方 API id 原样；display_name = 照抄 DSH 的 name 整串（别名与 DSH 一致）
- *   - 排序 = 按 name 末尾「每5小时N次」的次数倒序，同次数按 settings.yaml 原序
+ *   - 排序 = 按 name 末尾「每5小时N次」的次数倒序，同次数按配置补丁原序
  *   - 默认模型 = DeepSeek 系里次数最大的那一条的官方 id（codemoss 模板与 live config.toml 同时写，并加注释标记）
  *   - claude 段 / ~/.claude 下任何文件：一律逐字节不动
  *
  * 用法
  *   node codex-opencode-sync.mjs           预览（零写入）
- *   node codex-opencode-sync.mjs --apply   备份后落库（并发防护：settings.yaml 2 分钟内被写过则跳过）
+ *   node codex-opencode-sync.mjs --apply   备份后落库（并发防护：cordis.patch.yml 2 分钟内被写过则跳过）
  *   node codex-opencode-sync.mjs --apply --force   忽略并发防护
  *
  * 退出码：0 = 成功（含"无变化"与"并发跳过"）；1 = 校验失败已回滚
@@ -37,7 +37,10 @@ const FORCE = process.argv.includes('--force');
 const WRITE_CODEMOSS = process.argv.includes('--write-codemoss');
 const HOME = os.homedir();
 
-const SETTINGS = path.join(HOME, '.dsh', 'settings.yaml');
+// 配置真源(2026-09-23 起):<DSH_HOME>/profiles/web/cordis.patch.yml。
+// 新版 DSH(0.1.7+)启动时把 ~/.dsh/settings.yaml 一次性导入各 profile 补丁并改名 settings.yaml.imported,
+// 旧文件已不存在 —— 这里必须锚新落点,否则脚本一律读空、直接中止(2026-09-23 实测)。
+const DSH_CONFIG = path.join(HOME, '.dsh', 'profiles', 'web', 'cordis.patch.yml');
 const CATALOG = path.join(HOME, '.codex', 'models.json');
 const CODEMOSS = path.join(HOME, '.codemoss', 'config.json');
 const CODEX_TOML = path.join(HOME, '.codex', 'config.toml');
@@ -46,7 +49,7 @@ const CONCURRENCY_GUARD_MS = 2 * 60 * 1000;
 const DEFAULT_MODEL_FAMILY = /^deepseek/; // 默认模型只从 DeepSeek 系里挑
 const PICK = /^(deepseek|glm)/i;          // 渠道家族：DeepSeek / GLM
 const FLASH_ONLY = /flash/i;              // 2026-09-10 收紧：只留 flash 档，Pro 及其它档用不起
-const CATALOG_DESCRIPTION = 'OpenCode Go 套餐接入；名称口径与 DSH settings.yaml 一致';
+const CATALOG_DESCRIPTION = 'OpenCode Go 套餐接入；名称口径与 DSH 配置补丁(profiles/web/cordis.patch.yml)一致';
 const BASE_INSTRUCTIONS =
     'You are Codex, a precise coding agent. Complete tasks directly with minimal edits, ' +
     "follow the repository's existing style, and verify changes before finishing.";
@@ -70,7 +73,7 @@ function loadYaml() {
     for (const c of cands) {
         if (fs.existsSync(c)) return createRequire(c)('yaml');
     }
-    throw new Error('找不到 DSH checkout 里的 yaml 依赖，无法解析 settings.yaml');
+    throw new Error('找不到 DSH checkout 里的 yaml 依赖，无法解析 DSH 配置补丁');
 }
 
 /** name 末尾「每5小时N次」的次数；取不到 -1 */
@@ -132,19 +135,36 @@ function jsonStringLiteral(text, keyIdx) {
     throw new Error('字符串未闭合');
 }
 
+/**
+ * 新版 DSH 的配置真源是 profile 补丁(顶层 = 条目数组 [{id, config}]),
+ * 旧 settings.yaml 是顶层段映射。统一折算成"段名 → 条目对象",下游取数逻辑不必分叉。
+ */
+function sectionsOf(root) {
+  if (!Array.isArray(root)) return root;
+  const out = {};
+  const take = (e) => {
+    if (e && e.id && !(e.id in out)) out[e.id] = e;
+  };
+  for (const e of root) {
+    if (e && Array.isArray(e.insert)) e.insert.forEach(take);
+    else take(e);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- 1. 读数据源
 const YAML = loadYaml();
-const settingsRaw = fs.readFileSync(SETTINGS, 'utf8');
-const settingsMtime = fs.statSync(SETTINGS).mtime;
+const settingsRaw = fs.readFileSync(DSH_CONFIG, 'utf8');
+const settingsMtime = fs.statSync(DSH_CONFIG).mtime;
 
-const doc = YAML.parse(settingsRaw);
-const allModels = doc['llm-pi-ai'].providers['opencode-go'].models;
+const doc = sectionsOf(YAML.parse(settingsRaw));
+const allModels = doc['llm-pi-ai'].config.providers['opencode-go'].models;
 const picked = allModels
     .map((m, i) => ({ ...m, _i: i, _n: tailCount(m.name) }))
     .filter((m) => PICK.test(m.id) && FLASH_ONLY.test(m.id))
     .sort((a, b) => b._n - a._n || a._i - b._i);
 
-if (picked.length === 0) throw new Error('opencode-go 里没有命中 deepseek/glm 的 flash 条目，中止（疑似 settings.yaml 异常）');
+if (picked.length === 0) throw new Error('opencode-go 里没有命中 deepseek/glm 的 flash 条目，中止（疑似 cordis.patch.yml 异常）');
 
 const defaultEntry = picked.filter((m) => DEFAULT_MODEL_FAMILY.test(m.id)).sort((a, b) => b._n - a._n)[0];
 if (!defaultEntry) throw new Error('DeepSeek 系里没有条目，无法确定默认模型，中止');
@@ -161,7 +181,7 @@ const markLine =
     '）';
 
 log('=== 数据源 ===');
-log(SETTINGS, '| mtime =', settingsMtime.toLocaleString());
+log(DSH_CONFIG, '| mtime =', settingsMtime.toLocaleString());
 log(`opencode-go 共 ${allModels.length} 条 → 命中 deepseek/glm flash ${picked.length} 条`);
 picked.forEach((m, i) => log(`  ${String(i + 1).padStart(2)}. ${m.id.padEnd(30)} ${String(m._n).padStart(6)} 次/5h  ${m.name}`));
 log('默认模型（次数最大的 DeepSeek 档）=', DEFAULT_MODEL);
@@ -340,7 +360,7 @@ if (changes === 0) { log('无变化，不写盘。'); process.exit(0); }
 // ---------------------------------------------------------------- 6. 并发防护 + 写入
 const since = Date.now() - settingsMtime.getTime();
 if (!FORCE && since < CONCURRENCY_GUARD_MS) {
-    log(`检测到并发写：settings.yaml ${Math.round(since / 1000)} 秒前被写过（<2 分钟），本轮跳过落库，只出报告。`);
+    log(`检测到并发写:cordis.patch.yml ${Math.round(since / 1000)} 秒前被写过（<2 分钟），本轮跳过落库，只出报告。`);
     process.exit(0);
 }
 

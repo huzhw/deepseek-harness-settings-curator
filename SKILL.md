@@ -1,20 +1,22 @@
 ---
 name: deepseek-harness-settings-curator
-description: DeepSeek Harness（DSH）专用技能：定期梳理 settings.yaml 的 LLM 供应商模型配置（追加新模型、清理失效/重复模型、参数量与版本标记对齐、找限时免费模型）。触发词：梳理配置、梳理模型、settings.yaml、追加模型、清理模型、清理旧模型、免费模型、限时免费、参数对齐、模型配置、模型维护、默认模型、模型路由、切模型、费用检查、agent-default-model。
+description: DeepSeek Harness（DSH）专用技能：定期梳理 DSH 的 LLM 供应商模型配置（2026-09-23 起真源 = profiles/web/cordis.patch.yml 的 profile 补丁，旧 settings.yaml 已退役），追加新模型、清理失效/重复模型、参数量与版本标记对齐、找限时免费模型。触发词：梳理配置、梳理模型、cordis.patch.yml、profile 补丁、settings.yaml、追加模型、清理模型、清理旧模型、免费模型、限时免费、参数对齐、模型配置、模型维护、默认模型、模型路由、切模型、费用检查、agent-default-model。
 author: 胡志伟
 platform: DSH (DeepSeek Harness)
 motto: "配置如园，常理常新。查证为准，不写未知。每次改动，方案先行。"
 ---
 
-# 📋 settings.yaml 模型配置梳理 — 胡架定制
+# 📋 DSH 模型配置梳理（profile 补丁版） — 胡架定制
 
 > **本技能专用于 DeepSeek Harness（DSH）的模型配置维护**（DSH 消费端 `~/.dsh/skills` 为第一使用场景，同时兼容挂载到 Claude Code 技能目录）
 
 ## 目标文件
 
-- 主文件：`C:\Users\Administrator\.dsh\settings.yaml`（DSH LLM 供应商配置；密钥已零明文迁到 `~/.dsh/.credentials.yaml`，settings 用 apiKeyEnv 变量名引用，两处都勿外传）
-- 已知 provider（精简阵容 5 个）：zhipu（智谱GLM官方）、opencode-go（OpenCode Go）、bailian（百炼）、company-gateway（公司网关3000）、openrouter-go（OpenRouter直连）；已下线：volcengine（火山方舟）、sensenova（商汤日月新）；另有官方直连路由 `deepseek-official`（配置段 `llm-deepseek:`，非 llm-pi-ai 成员，详见 §7）
-- 默认模型（agent-default-model）：`settings.yaml` 顶层段 **+** `profiles/tui/cordis.patch.yml`、`profiles/web/cordis.patch.yml` 补丁段（**patch 覆盖 settings，生效以 patch 为准**）
+- 主文件（唯一真源）：`C:\Users\Administrator\.dsh\profiles\web\cordis.patch.yml` —— 新版 DSH（0.1.7+）的配置权威落点，**顶层是条目数组**：`- id: llm-pi-ai`（各渠道模型在 `config.providers.<路由>.models`）、`- id: llm-deepseek`（官方直连模型在 `config.models`）、`- id: agent-default-model`、`- id: permission` 等，每项 `config:` 下挂该插件配置。
+- ⚠️ **旧 `~/.dsh/settings.yaml` 已退役（2026-09-23 起）**：新版 DSH 启动时把它一次性导入各 profile 补丁并改名 `settings.yaml.imported`，该文件之后不存在、也不再被读取。**凡是仍指向 settings.yaml 的脚本/提示词/话术全部失效**，一律改锚 `cordis.patch.yml`（2026-09-23 实测：巡检任务因此连环 failed）。
+- 已知 provider（精简阵容 5 个）：zhipu（智谱GLM官方）、opencode-go（OpenCode Go）、bailian（百炼）、company-gateway（公司网关3000）、openrouter-go（OpenRouter直连）；已下线：volcengine（火山方舟）、sensenova（商汤日月新）；另有官方直连路由 `deepseek-official`（配置在 `- id: llm-deepseek` 条目的 `config.models`，非 llm-pi-ai 成员，详见 §7）
+- 默认模型（agent-default-model）：`profiles/web/cordis.patch.yml` 的 `- id: agent-default-model` 条目（生效值）；`profiles/tui/cordis.patch.yml` 另有一份（只对 tui profile 生效），互不干扰
+- **配置层级（patch 语义，2026-09-23 实测）**：引擎内置 bundle → `<profile>/cordis.patch.yml` → 运行期 `--patch <一次性 yml>`，**后者压前者**；同 id 的条目以更靠后的层为准（实测：面板 AI 任务用 `--patch` 压 `agent-default-model` 与 `permission` 均生效）
 - 网络放行：`C:\Users\Administrator\.dsh\rules.yaml` 网络白名单（查官方价目需放行 `api.deepseek.com` / `bigmodel.cn` / `open.bigmodel.cn`；2026-08-31 已加）
 - **Codex 侧同步链（详见 §8 Codex 侧同步）**：`C:\Users\Administrator\.codex\models.json`（Codex 模型目录，由 live `~/.codex/config.toml` 的 `model_catalog_json` 指向）← 定时任务「codex opencode-go 全量口径巡检」（13:10）每轮维护；而 `C:\Users\Administrator\.codemoss\config.json`（CCGUI 插件 `idea-claude-code-gui` 的私有状态，内含 Codex 供应商的 `configToml` 模板）**是原厂件，只能在该插件 UI 里改，外部一律只读**——改它会让插件的 `appliedProviderRevision` 校验失配、Codex 会话直接罢工。**codemoss 的 `claude` 段与 `~/.claude` 下任何文件更不属本技能管辖，禁止改动**
 
@@ -28,7 +30,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 
 ## 安全红线（必读）
 
-1. **密钥文件含明文 API key，禁止整文件 read/输出**——会命中 dsh-defend（sk-openai / bearer-token 规则）被拦截。settings.yaml 已零明文（apiKeyEnv 引用），明文密钥本体在 `~/.dsh/.credentials.yaml`，掩码规则照旧适用。
+1. **密钥文件含明文 API key，禁止整文件 read/输出**——会命中 dsh-defend（sk-openai / bearer-token 规则）被拦截。`cordis.patch.yml` 已零明文（供应商用 `apiKeyEnv` 引变量名），明文密钥本体在 `~/.dsh/.credentials.yaml`，掩码规则照旧适用。
    - 查看：用分段 read 跳过密钥行；或 pwsh 掩码后输出：
      ```powershell
      $m = $l -replace 'sk-[A-Za-z0-9_\-\.]+', 'KEY'
@@ -84,9 +86,9 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 
 ### 6. 默认模型（agent-default-model）梳理与费用核查
 
-- 位置与生效：settings.yaml 顶层段 + 两个 profile 的 cordis.patch.yml（**patch 覆盖 settings，两处不一致以 patch 为准**）。
+- 位置与生效：`profiles/web/cordis.patch.yml` 的 `- id: agent-default-model` 条目（生效值）；`profiles/tui/cordis.patch.yml` 里另有一份（只对 tui profile 生效，互不干扰）。旧 settings.yaml 顶层段已随新版 DSH 退役。
 - 影响面：默认模型 = 主代理路由，**dsh-auto-review 审查器 fork 继承同一路由**，改一处两者同切渠道。
-- 检查项：provider 必须在 settings.yaml `llm-pi-ai.providers` 存在，或为官方直连路由 `deepseek-official`（配置在 `llm-deepseek:` 段，见 §7）；model id 必须在对应 provider 的 models 列表（deepseek-official 对应 `llm-deepseek.models` 或内置目录三行之一）。
+- 检查项：provider 必须在补丁 `- id: llm-pi-ai` 条目的 `config.providers` 里存在，或为官方直连路由 `deepseek-official`（配置在 `- id: llm-deepseek` 条目的 `config.models`，见 §7）；model id 必须在对应路由的 models 列表（deepseek-official 对应 `config.models` 或内置目录三行之一）。
 - 历史坑：patch 残留 `provider: deepseek`（缺 -official 的旧写法）会同时把主代理+审查器烧向官网（2026-08-31 已切 `zhipu / glm-5.3-flash`）；官方直连的规范路由名是 `deepseek-official`，别把正确名当坑绕开。
 - 费用核查（选型依据）：
   1. 本地优先：`pi-ai\dist\providers\data\*.json` 的 `cost` 字段（input/output/cacheRead，单位 $/1M；全 0 = 免费）。**注意快照滞后**：本地是 7/25 生成，DeepSeek 8/17 调价（峰谷定价，高峰最高 +1100%，周末低谷价）后已作废，必须与官网/报道对账。
@@ -99,7 +101,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 
 ### 7. deepseek-official 官方直连渠道
 
-- 定位：DeepSeek 官方直连适配器（`dsh-llm-deepseek`），路由名 `deepseek-official`（不是 `deepseek`）；配置在 settings.yaml 顶层 `llm-deepseek:` 段，独立于 `llm-pi-ai.providers`，两套适配器可并存。
+- 定位：DeepSeek 官方直连适配器（`dsh-llm-deepseek`），路由名 `deepseek-official`（不是 `deepseek`）；配置在补丁的 `- id: llm-deepseek` 条目（`config.models`），独立于 `- id: llm-pi-ai` 的 `config.providers`，两套适配器可并存。
 - 结构（照 schema 实录）：
   - `apiKeyEnv`：凭据引用名，默认 `DEEPSEEK_API_KEY`（凭据 ref 已存在）；`baseURL` 缺省即官方公共端点。
   - `thinking`：enabled/disabled；`reasoningEffort`：off/low/high/max。
@@ -113,7 +115,8 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 
 **口径（红线，与官网/智谱/百炼不是一套逻辑）**
 - 定位：OpenCode Go 订阅渠道（$10/月、$100 用量，仅订阅用户可用）；**按线上协议拆两条路由**（2026-09-17 定，见下方「协议分路由」）：`opencode-go`（`api: openai-completions`、baseURL `https://opencode.ai/zen/go/v1`）与 `opencode-go-anthropic`（`api: anthropic-messages`、baseURL `https://opencode.ai/zen/go`，**不带 `/v1`**——适配器自动补 `/v1/messages`）。
-- **全量收录**：官方「当前支持的模型列表」里的模型**一个不落**，只增不减（官方下架才删）；**不做三线口味精简、不跨渠道去重、不与官网/智谱/百炼合并口径**。
+- **全量收录**：官方「当前支持的模型列表」里的模型**一个不落**，只增不减（官方下架才删）；**不做三线口味精简、不跨渠道去重、不与官网/智谱/百炼合并口径**。**阈值豁免（2026-09-20 定，用户口径）**：请求数低于 1000 的模型（name 显示次数 <1000）**不收录、不进任何一条路由**；「每5小时无限制次」的条目不算低于 1000、照常收录；促销回落或官方调次数导致某条跌破 1000 时，下一轮巡检自动摘掉该条。
+- **displayName 协议后缀（2026-09-20 定）**：渠道 displayName 统一带协议标注——`openai-completions` 加 `(OpenAi协议)`、`anthropic-messages` 加 `(Anthropic协议)`（实例：`OpenCode Go套餐(OpenAi协议)` / `OpenCode Go套餐(Anthropic协议)` / `智谱GLM官方(Anthropic协议)` / `OpenRouter(直连)(OpenAi协议)`）；巡检只守不碰（骨架键），改名只由人工做；选择器刷新需重启 dsh。deepseek官网（llm-deepseek 独立适配器）不参与此约定。
 - **命名**：`[新/][N倍用量/]OpenCode/<显示名>/<参数量?>(/<版本?>)/每5小时N次`
   - **标记区前置**：官方「新」徽章拼 `新/`、落地页限时倍数拼 `N倍用量/`，两者都放在 `OpenCode` **前边**（都有则 `新/4倍用量/OpenCode/…`；只有一个就只拼那个；都没有则省略）；
   - **显示名带版本**（DeepSeek V4.1 Flash → `deepseek-v4.1-flash`）；**id 用官方 API id**（V4.1 Flash 的官方 id 是 `deepseek-flash`，官方命名不跟版本走）；
@@ -148,13 +151,13 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 
 **校验（必须全过，任一不过即回滚并报错，不静默）**
 1. `YAML.parse` 通过；
-2. **id 集合双向 diff（两路由并集）**：官方列表 −（`opencode-go` ∪ `opencode-go-anthropic`）= ∅ **且** 并集 − 官方 = ∅，且并集内**无重复 id**；
-3. 条数比对：官方 N = 两条路由条数之和；
+2. **id 集合 diff（两路由并集，按 1000 阈值豁免口径，2026-09-20 定）**：官方列表 −（`opencode-go` ∪ `opencode-go-anthropic`）允许非空，但其中每一条都必须是次数<1000 的模型（凡次数≥1000 或「无限制」的条目漏配即判失败）**且** 并集 − 官方 = ∅，且并集内**无重复 id**；
+3. 条数比对：官方 N − 其中次数<1000 的条数 = 两条路由条数之和；
 4. name 正则逐条 `^(新/)?(\d+倍用量/)?OpenCode/.+/每5小时(\d+|无限制)次(/限时)?$`（官方无预估的用 `无限制次`，限时档末尾补 `/限时`；确有其它例外须显式标注）；
 5. **排序单调性**：逐条解析 name 末尾的次数，序列必须**非递增**（排序键 = 显示值，促销值优先）——排错即判失败、还原备份；
 6. **路由骨架未被改动**：`opencode-go` 仍 `api: openai-completions` + baseURL `…/zen/go/v1`；`opencode-go-anthropic` 仍 `api: anthropic-messages` + baseURL `https://opencode.ai/zen/go`（无 `/v1`）+ 同 `apiKeyEnv`；任一被动过即判失败、还原备份；
-7. 落库前备份 `settings.yaml.bak-<时间戳>`，落库后回读打印全部 id/name（标明所属路由）供人工核；
-8. **pi-ai schema 校验（2026-09-19 加，必跑）**：`node "F:\idea-workspase-skills\deepseek-harness-settings-curator\scripts\pi-ai-schema-check.mjs"`，exit 1 = 分节会被拒载，立即还原备份——YAML.parse 只管语法，拦不住 `input` 超枚举这类 schema 拒载。
+7. 落库前备份到 `C:\Users\Administrator\.dsh\profiles\web\.bak\cordis.patch.yml.bak-<时间戳>`，落库后回读打印全部 id/name（标明所属路由）供人工核；
+8. **pi-ai schema 校验（2026-09-19 加，必跑）**：`node "F:\idea-workspase-skills\deepseek-harness-settings-curator\scripts\pi-ai-schema-check.mjs" "C:\Users\Administrator\.dsh\profiles\web\cordis.patch.yml"`，exit 1 = 条目会被 DSH 拒载，立即还原备份——YAML.parse 只管语法，拦不住 `input` 超枚举这类 schema 拒载。脚本缺省目标已是 web 补丁，且**补丁里两个 llm 条目都不在时会直接判失败**（防"读空即跳过"的假通过）。
 
 **执行方式**：定时任务「opencode-go 全量口径巡检」按 §10 排班跑（B 模式自主落库：先备份 → 改 → 跑上面 1~8 项校验 → 任一失败即还原备份并报错）；人工梳理时并入 §1「最新 flash 巡视」同轮。
 
@@ -168,8 +171,8 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
   # ⚠️ --write-codemoss 会写 .codemoss\config.json —— 默认关闭，非必要别开（2026-09-10 事故成因）
   ```
 - **口径**（与 DSH 的 §8 全量口径不是一套）：
-  - 收录集合 = `settings.yaml` 的 `opencode-go.models` 里 **id 匹配 `^deepseek` 或 `^glm`** 的条目（DeepSeek 全系 + GLM 全系，2026-09-10 为 8 条）；其余渠道内模型（mimo / kimi / minimax / qwen / hy / grok / longcat / omen / muse-spark / gpt-*）**一律不进 Codex 清单**。
-  - `slug` = 官方 API id **原样**（V4.1 Flash 的 slug 是 `deepseek-flash`）；**`display_name` = 照抄 DSH 的 `name` 整串**（别名与 DSH 一致，带 `新/`、`N倍用量/` 标记与次数）；排序 = 按 name 末尾次数倒序，同次数按 settings.yaml 原序。
+  - 收录集合 = 补丁 `- id: llm-pi-ai` 条目 `config.providers.opencode-go.models` 里 **id 匹配 `^deepseek` 或 `^glm`** 的条目（DeepSeek 全系 + GLM 全系，2026-09-10 为 8 条）；其余渠道内模型（mimo / kimi / minimax / qwen / hy / grok / longcat / omen / muse-spark / gpt-*）**一律不进 Codex 清单**。
+  - `slug` = 官方 API id **原样**（V4.1 Flash 的 slug 是 `deepseek-flash`）；**`display_name` = 照抄 DSH 的 `name` 整串**（别名与 DSH 一致，带 `新/`、`N倍用量/` 标记与次数）；排序 = 按 name 末尾次数倒序，同次数按补丁原序。
   - 其余字段逐字沿用 Codex 目录模板（`base_instructions` / `supported_reasoning_levels` 五档 / `priority:1` / `context_window:1000000` / `effective_context_window_percent:95` …），**不新增不删字段**。
   - **口径默认模型 = DeepSeek 系里调用次数最大的那条的官方 id**（2026-09-10 为 `deepseek-flash`，4 倍用量 26,000 次/5h）。**但默认模型由 CCGUI 供应商模板的 `model` 行决定，脚本只报不写**——要改就在 CCGUI 供应商管理 UI 里改（见下）。
 - **落点与归属（2026-09-10 事故后定，红线）**：
@@ -203,48 +206,51 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 
 ### 9. 流程红线
 - 任何改动前：**分析 → 方案结尾带四字成语确认词 → 等用户回确认词才动手**（"行/好/确认"等不算）。
-- 改 agent-default-model 前**先备份两个 profile 的 cordis.patch.yml**（`Copy-Item <file> cordis.patch.yml.bak-<时间戳>`）。
+- 改 agent-default-model 前**先备份 profile 补丁**（`Copy-Item <file> C:\Users\Administrator\.dsh\profiles\web\.bak\cordis.patch.yml.bak-<时间戳>`；tui 那份若也动，一并备份）。
 - 多个方案列出来让用户选，不替用户做主。
 - 改后校验（两道，任一不过立即回滚）：
   ```powershell
-  # ① 语法：YAML.parse（工作目录放 DSH checkout，yaml 依赖在 node_modules）
-  node -e "const fs=require('fs');const YAML=require('yaml');const doc=YAML.parse(fs.readFileSync(process.env.USERPROFILE+'/.dsh/settings.yaml','utf8'));console.log('YAML_OK')"
-  # ② schema（2026-09-19 加，必跑，任意目录可跑）：引擎自带 Config 真 schema 校验 llm-pi-ai / llm-deepseek 两分节
+  # ① 语法：YAML.parse（工作目录放 DSH checkout，yaml 依赖在 node_modules；补丁顶层是数组，看条目数）
+  node -e "const fs=require('fs');const YAML=require('yaml');const doc=YAML.parse(fs.readFileSync('C:/Users/Administrator/.dsh/profiles/web/cordis.patch.yml','utf8'));console.log('PATCH_YAML_OK 条目数='+doc.length)"
+  # ② schema（2026-09-19 加，必跑，任意目录可跑）：引擎自带 Config 真 schema 校验补丁里的 llm-pi-ai / llm-deepseek 条目
   node "F:\idea-workspase-skills\deepseek-harness-settings-curator\scripts\pi-ai-schema-check.mjs"
   ```
-  只跑①是 2026-09-18 事故根因之一：语法全对但 `input` 声明 `audio/video` 超枚举 → 整个 `llm-pi-ai` 分节被拒载、全渠道模型消失。
+  只跑①是 2026-09-18 事故根因之一：语法全对但 `input` 声明 `audio/video` 超枚举 → 整个 `llm-pi-ai` 条目被拒载、全渠道模型消失。
 - 用户可能自行改过文件：edit 前必须先 read；报"file changed since read"就重读再编辑。
 - 只改任务要求的，不顺手优化；尊重用户手改（如 displayName、去版本号命名）。
 
 ### 10. 定时任务与巡检排班
 
-> 本节是 **2026-09-10 快照**（2026-09-17 复核过任务存放位置）。**改过任务后顺手更新本节**，过期排班表会误导后来人。
+> 本节 **2026-09-23 实测复核**（原 2026-09-10 快照）。**改过任务后顺手更新本节**，过期排班表会误导后来人。
 >
-> **任务实档在哪（2026-09-17 实测）**：桌面端「定时任务」面板的调度器由插件 `dsh-tauri-panel-scheduler` 提供，宿主存储 + HTTP 接口 `/api/desktop/dsh-tauri-panel-scheduler/tasks`（GET/POST/PUT/DELETE，另 `/tasks/toggle`、`/tasks/run`、`/history`、`/options`、`/runs/recover`）；任务会话的工作目录固定是 `~/.dsh/automations`（插件常量 `SCHEDULER_UNGROUPED_DIRECTORY`，巡检的临时脚本也落这里）。
-> - 引擎自带调度器（`scheduler_create`/`scheduler_list` 等工具读写的那个）是**另一套**：实档 `~/.dsh/crons/tasks`，**2026-09-15 起为 `{"version":1,"tasks":[]}`**；`scheduler_list` 查的也是它 → 会误报「当前没有定时任务」。
-> - 2026-09-17 实测的怪象：面板 API 返回 `{"tasks":[]}`、全盘也搜不到任何含 `nextRunAt`/`lastRunAt` 的任务实档，**但当天 12:38/12:46 与 18:30/18:38 的巡检照跑**（现场在 `~/.dsh/storages/session_projcache/sessions/` 的 `task-*.json` / `session-*.json`）→ 那批任务只活在**运行中进程的内存里**，重启即失。**要让巡检继续跑，必须在面板里把任务重建出来**（重建才落库）。
+> **任务实档在哪（2026-09-23 实测）**：巡检已全部搬进**日报管家面板**——任务在 `daily_panel.ai_task` + `ai_task_schedule` 两张表（页面「日报管家 → AI 任务」，程序化读写走面板 `:18787/api/aitask/*`），由面板进程内的 node-schedule 触发；每次运行由面板 spawn `node <dsh 的 bin.js> --profile web --patch <一次性覆盖层> "<提示词>"`，工作目录固定 `~/.dsh/automations`。
+> - **DSH 侧两套调度器 2026-09-23 实测都已空**：桌面端插件调度器 `GET :13080/api/desktop/dsh-tauri-panel-scheduler/tasks` → `{"tasks":[]}`；引擎自带 `~/.dsh/crons/tasks` → 空（`scheduler_list` 查的也是它）。**别再往 DSH 侧找巡检任务**，改任务一律去面板。
+> - DSH 侧遗留的 `~/.dsh/automations/*.mjs|ps1`（09-10/09-19 那批）已无人调用，且仍写死 `settings.yaml` —— 复活前必须换锚 `profiles/web/cordis.patch.yml`。
+> - 判断「某轮巡检到底跑了没」：面板 `ai_task_log`（`/api/aitask/logs`，比自述可靠）最准，其次看 `~/.dsh/sessions/**/session*.jsonl.zstd` 的 mtime。
 
-排班表（模型统一 `deepseek-official/deepseek-v4-flash`，权限一律 `danger-full-access`）：
+排班表（面板实档 2026-09-23 查；模型统一 `deepseek-official/deepseek-flash`，权限一律 `danger-full-access`，超时 1800s）：
 
-| 时间 | 任务 | 落库口径 |
-|---|---|---|
-| 12:30 | 官网巡检（llm-deepseek.models） | 自动收录，只增不删 |
-| 12:38 / 18:30 | opencode-go 全量口径巡检 | 自动落库（§8 全量镜像；**2026-09-17 起拆 `opencode-go` + `opencode-go-anthropic` 两条路由，`union-alpha` 归 anthropic 侧**） |
-| 12:46 / 18:38 | 前沿免费模型巡检（openrouter-go） | 自动收录，仅前沿档 |
-| 12:54 | 智谱巡检（zhipu / zhipu-htc） | 自动收录，只增不删 |
-| 13:02 | 百炼巡检（bailian） | 自动收录，只增不删 |
-| 13:10 | codex opencode-go 全量口径巡检（Codex 侧） | 自动落库（§8 Codex 侧同步：`~\.codex\models.json` + 兜底补 live 的 `model_catalog_json` 行；`.codemoss\config.json` 只读） |
+| 面板任务 id | 时间 | 任务 | 落库口径 |
+|---|---|---|---|
+| 3 | 12:30 | 官网巡检（`- id: llm-deepseek` 的 `config.models`） | 自动收录，只增不删 |
+| 4 | 12:38 / 18:30 | opencode-go 全量口径巡检 | 自动落库（§8 全量镜像；两条路由 `opencode-go` + `opencode-go-anthropic`） |
+| 5 | 12:46 / 18:38 | 前沿免费模型巡检（openrouter-go） | 自动收录，仅前沿档 |
+| 6 | 12:54 | 智谱巡检（zhipu / zhipu-htc） | 自动收录，只增不删 |
+| 7 | 13:02 | 百炼巡检（bailian） | 自动收录，只增不删 |
+| 10 | 13:10 | codex opencode-go 全量口径巡检（Codex 侧） | 自动落库（`~\.codex\models.json` + 兜底补 live 的 `model_catalog_json` 行；`.codemoss\config.json` 只读） |
+| 11 | 13:18 | deepseek CCGUI claude code 全量口径巡检 | CCGUI claude 段别名同步（`deepseek-claude-sync.mjs`；备份 `~\.dsh\backup\ccgui-claude\`） |
+| 12 | 13:26 | glm CCGUI claude code 智谱巡检 | CCGUI claude 段别名同步（`zhipu-claude-sync.mjs`；备份同上） |
 
 排班原则（红线，改动前先读）：
 
 - **跑在空闲窗口**：官网直连有峰谷价（周一至五 9-12、14-18 为高峰），排班全落在 12:00-14:00 与 18:00 之后 → 半价。
-- **错峰 ≥8 分钟 + 并发防护 2 分钟，两者必须配套**：同批任务都写同一个 `settings.yaml`，落盘前先看该文件 LastWriteTime，**不足 2 分钟就跳过本轮落库**（只出报告并写明"检测到并发写"）。若把错峰压到 2 分钟以内，或把防护窗口放大到 5 分钟以上，邻座任务会被误判并发而**集体白跑**。
+- **错峰 ≥8 分钟 + 并发防护 2 分钟，两者必须配套**：同批任务都写同一个 profile 补丁（`profiles/web/cordis.patch.yml`），落盘前先看该文件 LastWriteTime，**不足 2 分钟就跳过本轮落库**（只出报告并写明"检测到并发写"）。若把错峰压到 2 分钟以内，或把防护窗口放大到 5 分钟以上，邻座任务会被误判并发而**集体白跑**。
 - **一天两次的需求拆成两个任务**：scheduler 单个任务一天只能有一个时刻（`kind: daily` 仅一个 `time`），所以"中午 + 晚上"= 两个任务，prompt 正文完全相同。
 - 高频任务锚点尽量压在空闲窗口内；落在高峰的那几轮只是 flash 输入价翻倍，差价每天几分钱，不值得为此牺牲频率。
 - 模型钉在任务上（`provider`/`model` 字段）：不吃 `agent-default-model`；opencode 巡检钉**别的渠道**，避免"套餐挂了连巡检都跑不动"的自证循环。
-- **Codex 侧那条（13:10）不写 `settings.yaml`、只读它** → 不受"2 分钟并发防护"约束（脚本内仍保留该防护，撞上就只出报告不落库）；必须排在 12:38 那轮之后，才能取到当天最新落库结果。它同样钉 `deepseek-official`：任务正文只读写 `~\.codex\models.json`（+ 兜底补 live 的 `model_catalog_json` 行），**一次都不碰 `.codemoss\config.json`**（CCGUI 私有状态，见 §8），也不碰 opencode-go 的 API。
+- **Codex 侧那条（13:10）不写 profile 补丁、只读它** → 不受"2 分钟并发防护"约束（脚本内仍保留该防护，撞上就只出报告不落库）；必须排在 12:38 那轮之后，才能取到当天最新落库结果。它同样钉 `deepseek-official`：任务正文只读写 `~\.codex\models.json`（+ 兜底补 live 的 `model_catalog_json` 行），**一次都不碰 `.codemoss\config.json`**（CCGUI 私有状态，见 §8），也不碰 opencode-go 的 API。
 
-权限与护栏：必须 `danger-full-access`——任务要写会话工作区之外的 `~/.dsh/settings.yaml`，且无人值守没人批权限，`read-only`/`workspace-write` 会在落盘那步被拒。每次落库：备份 `settings.yaml.bak-<时间戳>` → 只改自己那段 models → YAML.parse + `pi-ai-schema-check.mjs` schema 校验（见 §9，2026-09-19 加）→ 任一不过立即回滚并报错停手。
+权限与护栏：必须 `danger-full-access`——任务要写会话工作区之外的 `C:\Users\Administrator\.dsh\profiles\web\cordis.patch.yml`，且无人值守没人批权限，`read-only`/`workspace-write` 会在落盘那步被拒。每次落库：备份到 `profiles\web\.bak\cordis.patch.yml.bak-<时间戳>` → 只改自己那条条目的 models → YAML.parse + `pi-ai-schema-check.mjs` schema 校验（见 §9，2026-09-19 加）→ 任一不过立即回滚并报错停手。
 
 维护方法：
 
@@ -261,11 +267,11 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 ## 已知坑位
 
 - dsh-defend 会拦截任何"带密钥样式"的工具结果与 edit 参数；tool 参数也要避免 `Bearer <token>` 同行。
-- `ui-onboarding:` 等顶层键在 0 列（无缩进），编辑锚点别加空格。
+- 补丁里顶层条目是 `- id: xxx`（0 列），其子键 2 空格起；模型条目缩进比旧 settings.yaml 整体深 2 格（pi-ai：路由键 6 / models 8 / 模型 `- id` 10 / name·input 12 / `- text` 14；deepseek：models 4 / 模型 `- id` 6 / name 8），编辑锚点别带错缩进。
 - edit 工具 old_string 需与文件精确一致（含缩进）；多行块编辑比逐行安全。
 - 公司网关内网 `192.168.80.248:3000` 在白名单外，无法直连查验，按官网口径（0731/0813=正式版）标注。
-- agent-default-model 在 settings.yaml 与两个 profile patch 各有一份，容易两处不一致；patch 覆盖 settings，排查以 patch 为准。
+- agent-default-model 在 `profiles/web` 与 `profiles/tui` 两个补丁各有一份（旧 settings.yaml 那份已随新架构退役）；面板 AI 任务运行时还会被 `--patch` 覆盖层再压一次。排查顺序：命令行覆盖层 → `profiles/web/cordis.patch.yml` → 插件内置默认。
 - dsh-auto-review 审查器 fork 继承会话路由：换默认模型 = 主代理+审查器同时换渠道，反之亦然。
-- zhipu key 明文在 settings.yaml；dsh-defend 拦 `sk-`/Bearer 样式，写带 key 配置用"Authorization: Bearer 换行缩进下一行"写法。
+- zhipu key 明文在 `~/.dsh/.credentials.yaml`，补丁里只写 `apiKeyEnv` 变量名；dsh-defend 拦 `sk-`/Bearer 样式，写带 key 配置用"Authorization: Bearer 换行缩进下一行"写法。
 - Windows 沙箱受限令牌下 curl 的 schannel 报 `SEC_E_NO_CREDENTIALS`（TLS 挂），抓 https 用 node fetch 更稳；node 脚本写工作区 `_tmp\` 再跑，避免 shell 引号转义。
-- **`input:` 模态枚举只有 text/image（2026-09-18 实踩）**：百炼巡检给 omni 模型写 `audio/video` → 整个 `llm-pi-ai` 分节被 schema 拒载 → 6 路由 42 模型从选择器消失且**无报错弹窗**（进程内存留最后有效值，重启才暴露）。YAML.parse 查不出，必须跑 §9 的 schema 校验脚本。
+- **`input:` 模态枚举只有 text/image（2026-09-18 实踩）**：百炼巡检给 omni 模型写 `audio/video` → 整个 `llm-pi-ai` 条目被 schema 拒载 → 6 路由 42 模型从选择器消失且**无报错弹窗**（进程内存留最后有效值，重启才暴露）。YAML.parse 查不出，必须跑 §9 的 schema 校验脚本。
