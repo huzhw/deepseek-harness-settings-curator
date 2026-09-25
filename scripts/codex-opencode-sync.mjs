@@ -11,7 +11,7 @@
  *   - 数据源唯一 = <DSH_HOME>/profiles/web/cordis.patch.yml 里 - id: llm-pi-ai 条目 config.providers.opencode-go.models，本脚本不联网
  *   - 收录集合 = DSH opencode-go.models 当前全部条目，不按模型家族、Flash、Pro、预览版或其它规则过滤
  *   - slug = 官方 API id 原样；display_name = 照抄 DSH 的 name 整串（别名与 DSH 一致）
- *   - 排序 = 按 name 末尾「每5小时N次」的次数倒序，同次数按配置补丁原序
+ *   - 排序 = 按 name 末尾「5h·N」的数字倒序（5h·无限 记 +∞），同次数按配置补丁原序
  *   - 默认模型 = 优先取 DeepSeek 系里次数最大的条目；没有 DeepSeek 时取次数最大的现有条目
  *   - claude 段 / ~/.claude 下任何文件：一律逐字节不动
  *
@@ -74,19 +74,27 @@ function loadYaml() {
     throw new Error('找不到 DSH checkout 里的 yaml 依赖，无法解析 DSH 配置补丁');
 }
 
-/** name 末尾「每5小时N次」的次数；取不到 -1 */
+/** name 末尾「5h·N」的数字（可带 /限 尾巴）；「5h·无限」记 +∞，取不到 -1 */
 function tailCount(name) {
-    const m = /每5小时([\d,]+)次/.exec(name || '');
-    return m ? Number(m[1].replace(/,/g, '')) : -1;
+    const m = /5h·([\d,]+|无限)(?:\/限)?$/.exec(name || '');
+    if (!m) return -1;
+    return m[1] === '无限' ? Infinity : Number(m[1].replace(/,/g, ''));
 }
 
-/** name 里的显示名段：'新/4倍用量/OpenCode/deepseek-v4.1-flash/预览/每5小时26000次' → 'deepseek-v4.1-flash' */
+/** 配额展示：∞/5h 或 26,000/5h，取不到写未知 */
+function quotaLabel(n) {
+    if (n === Infinity) return '∞/5h';
+    if (n < 0) return '未知';
+    return `${n.toLocaleString('en-US')}/5h`;
+}
+
+/** name 里的显示名段：'新/4倍/OpenCode/deepseek-v4.1-flash/284B/5h·26000/限' → 'deepseek-v4.1-flash' */
 function displaySeg(name) {
     const rest = (name || '').split('OpenCode/')[1] || '';
     return rest.split('/')[0] || '';
 }
 
-/** name 里的标记段：'新/4倍用量/' → ['新','4倍用量'] */
+/** name 里的标记段：'新/4倍/' → ['新','4倍'] */
 function marks(name) {
     const pre = (name || '').split('OpenCode/')[0] || '';
     return pre.split('/').filter(Boolean);
@@ -174,7 +182,7 @@ const markLine =
     '# 默认模型 = opencode-go ' + defaultReason + '：' +
     displaySeg(defaultEntry.name) +
     '（' +
-    [markParts.join(' · '), `${defaultEntry._n.toLocaleString('en-US')} 次/5h`, `官方 id ${defaultEntry.id}`]
+    [markParts.join(' · '), quotaLabel(defaultEntry._n), `官方 id ${defaultEntry.id}`]
         .filter(Boolean)
         .join(' · ') +
     '）';
@@ -182,7 +190,7 @@ const markLine =
 log('=== 数据源 ===');
 log(DSH_CONFIG, '| mtime =', settingsMtime.toLocaleString());
 log(`opencode-go 当前 ${allModels.length} 条 → 完整同步 ${picked.length} 条（无模型过滤）`);
-picked.forEach((m, i) => log(`  ${String(i + 1).padStart(2)}. ${m.id.padEnd(30)} ${String(m._n).padStart(6)} 次/5h  ${m.name}`));
+picked.forEach((m, i) => log(`  ${String(i + 1).padStart(2)}. ${m.id.padEnd(30)} ${quotaLabel(m._n).padStart(10)}  ${m.name}`));
 log(`默认模型（${defaultReason}）=`, DEFAULT_MODEL);
 log('标记注释 =', markLine);
 
