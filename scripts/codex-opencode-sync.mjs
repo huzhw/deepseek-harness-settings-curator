@@ -2,17 +2,17 @@
 /**
  * codex-opencode-sync.mjs — Codex 侧 opencode-go 模型口径同步
  *
- * 把 DSH 的 opencode-go 渠道模型（DeepSeek 全系 + GLM 全系）同步到 Codex 侧三处：
+ * 把 DSH 的 opencode-go 渠道当前完整模型清单同步到 Codex 侧三处：
  *   ① ~/.codex/models.json            Codex 模型目录（model_catalog_json 指向）
  *   ② ~/.codemoss/config.json         Codemoss 里 codex provider 的 configToml 模板 + customModelContextWindows.codex（claude 段不碰）
  *   ③ ~/.codex/config.toml            live 配置：默认模型行 + model_catalog_json 行兜底
  *
  * 口径（红线）
  *   - 数据源唯一 = <DSH_HOME>/profiles/web/cordis.patch.yml 里 - id: llm-pi-ai 条目 config.providers.opencode-go.models，本脚本不联网
- *   - 收录集合 = id 匹配 ^(deepseek|glm) 且含 flash 的条目（只留 GLM flash + DeepSeek flash，Pro 及其它档用不起，2026-09-10 收紧）
+ *   - 收录集合 = DSH opencode-go.models 当前全部条目，不按模型家族、Flash、Pro、预览版或其它规则过滤
  *   - slug = 官方 API id 原样；display_name = 照抄 DSH 的 name 整串（别名与 DSH 一致）
  *   - 排序 = 按 name 末尾「每5小时N次」的次数倒序，同次数按配置补丁原序
- *   - 默认模型 = DeepSeek 系里次数最大的那一条的官方 id（codemoss 模板与 live config.toml 同时写，并加注释标记）
+ *   - 默认模型 = 优先取 DeepSeek 系里次数最大的条目；没有 DeepSeek 时取次数最大的现有条目
  *   - claude 段 / ~/.claude 下任何文件：一律逐字节不动
  *
  * 用法
@@ -46,9 +46,7 @@ const CODEMOSS = path.join(HOME, '.codemoss', 'config.json');
 const CODEX_TOML = path.join(HOME, '.codex', 'config.toml');
 const CONCURRENCY_GUARD_MS = 2 * 60 * 1000;
 
-const DEFAULT_MODEL_FAMILY = /^deepseek/; // 默认模型只从 DeepSeek 系里挑
-const PICK = /^(deepseek|glm)/i;          // 渠道家族：DeepSeek / GLM
-const FLASH_ONLY = /flash/i;              // 2026-09-10 收紧：只留 flash 档，Pro 及其它档用不起
+const DEFAULT_MODEL_FAMILY = /^deepseek/; // 默认模型优先从 DeepSeek 系里挑
 const CATALOG_DESCRIPTION = 'OpenCode Go 套餐接入；名称口径与 DSH 配置补丁(profiles/web/cordis.patch.yml)一致';
 const BASE_INSTRUCTIONS =
     'You are Codex, a precise coding agent. Complete tasks directly with minimal edits, ' +
@@ -159,20 +157,21 @@ const settingsMtime = fs.statSync(DSH_CONFIG).mtime;
 
 const doc = sectionsOf(YAML.parse(settingsRaw));
 const allModels = doc['llm-pi-ai'].config.providers['opencode-go'].models;
+if (!Array.isArray(allModels) || allModels.length === 0) {
+    throw new Error('opencode-go.models 为空/缺失，中止（疑似 cordis.patch.yml 异常）');
+}
 const picked = allModels
     .map((m, i) => ({ ...m, _i: i, _n: tailCount(m.name) }))
-    .filter((m) => PICK.test(m.id) && FLASH_ONLY.test(m.id))
     .sort((a, b) => b._n - a._n || a._i - b._i);
 
-if (picked.length === 0) throw new Error('opencode-go 里没有命中 deepseek/glm 的 flash 条目，中止（疑似 cordis.patch.yml 异常）');
-
-const defaultEntry = picked.filter((m) => DEFAULT_MODEL_FAMILY.test(m.id)).sort((a, b) => b._n - a._n)[0];
-if (!defaultEntry) throw new Error('DeepSeek 系里没有条目，无法确定默认模型，中止');
+const deepseekDefault = picked.filter((m) => DEFAULT_MODEL_FAMILY.test(m.id))[0];
+const defaultEntry = deepseekDefault || picked[0];
+const defaultReason = deepseekDefault ? '次数最大的 DeepSeek 档' : '次数最大的现有条目';
 const DEFAULT_MODEL = defaultEntry.id;
 
 const markParts = marks(defaultEntry.name);
 const markLine =
-    '# 默认模型 = opencode-go 调用次数最大的 DeepSeek 档：' +
+    '# 默认模型 = opencode-go ' + defaultReason + '：' +
     displaySeg(defaultEntry.name) +
     '（' +
     [markParts.join(' · '), `${defaultEntry._n.toLocaleString('en-US')} 次/5h`, `官方 id ${defaultEntry.id}`]
@@ -182,9 +181,9 @@ const markLine =
 
 log('=== 数据源 ===');
 log(DSH_CONFIG, '| mtime =', settingsMtime.toLocaleString());
-log(`opencode-go 共 ${allModels.length} 条 → 命中 deepseek/glm flash ${picked.length} 条`);
+log(`opencode-go 当前 ${allModels.length} 条 → 完整同步 ${picked.length} 条（无模型过滤）`);
 picked.forEach((m, i) => log(`  ${String(i + 1).padStart(2)}. ${m.id.padEnd(30)} ${String(m._n).padStart(6)} 次/5h  ${m.name}`));
-log('默认模型（次数最大的 DeepSeek 档）=', DEFAULT_MODEL);
+log(`默认模型（${defaultReason}）=`, DEFAULT_MODEL);
 log('标记注释 =', markLine);
 
 // ---------------------------------------------------------------- 2. 生成 models.json
@@ -315,7 +314,7 @@ const changes =
 log('--- 差异文件数 =', changes, '(models.json / codex config.toml' + (WRITE_CODEMOSS ? ' / codemoss config.json' : '') + ') ---');
 log('live config.toml 的 model 行 =', liveModelInFile || '(缺失)', '（由 CCGUI 模板决定，本脚本不改）');
 if (liveModelInFile && liveModelInFile !== DEFAULT_MODEL) {
-    log(`  口径默认模型是 ${DEFAULT_MODEL}（DeepSeek 系次数最大）。要改默认模型请在 CCGUI 供应商管理`);
+    log(`  当前默认模型是 ${DEFAULT_MODEL}（${defaultReason}）。要改默认模型请在 CCGUI 供应商管理`);
     log(`  里改该供应商模板的 model 行——脚本不代写：插件下次应用会把 live 的 model 行扳回模板值，写也是白写。`);
 }
 if (codemossOld !== codemossNew) {

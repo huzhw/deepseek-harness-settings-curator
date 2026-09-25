@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
- * deepseek-claude-sync.mjs — CCGUI Claude 供应商模板 ← DSH deepseek 官网口径同步
+ * deepseek-claude-sync.mjs — CCGUI Claude 供应商模板 ← DSH deepseek 官网清单同步
  *
- * 把 DSH 的 deepseek 官网渠道模型（llm-deepseek.models）同步进 CCGUI 的 Claude Code
+ * 把 DSH 的 deepseek 官网渠道模型（llm-deepseek.models）当前完整清单同步进 CCGUI 的 Claude Code
  * 供应商模板（.codemoss\config.json → claude.providers[deepseek官网].settingsConfig.env）：
- *   - 四个别名（OPUS/SONNET/FABLE/HAIKU）全挂 flash 正式档（Pro 用不起，禁用）
+ *   - 四个别名（OPUS/SONNET/FABLE/HAIKU）按 DSH 配置顺序映射全部模型
  *   - 端点固定 api.deepseek.com/anthropic（不一致才改）
  *   - token 模板里已有值一律不动（用户手配）；仅空值时从 ~/.dsh/.credentials.yaml 取
  *
  * 口径（红线）
  *   - 数据源唯一 = <DSH_HOME>/profiles/web/cordis.patch.yml 里 - id: llm-deepseek 条目的 config.models，本脚本不联网
- *   - 别名值只能取自当前口径内的 flash 系 id：口径删掉的模型必须同步从别名清掉，
- *     宁可四个别名重合，不准留口径外的死 id；Pro 系与预览/实验档不进别名
+ *   - 收录集合 = 当前全部条目，不按 Flash、Pro、预览版、模型家族或其它规则过滤
+ *   - 少于 4 个模型时用最后一个补齐空别名；超过 4 个时明确中止，绝不静默丢模型
  *   - 只动目标记录 env 里 4 个别名键 + 必要时 BASE_URL；settings.json 一个字节不碰；
  *     codex 段、其它供应商、claude.current、providerOrder 逐字节不动
  *   - [1m] 后缀沿用现值（1M 上下文标记）
@@ -113,21 +113,18 @@ if (!Array.isArray(models) || models.length === 0) {
     throw new Error('cordis.patch.yml 里 - id: llm-deepseek 条目的 config.models 为空/缺失，中止（疑似口径异常）');
 }
 
-// 选 flash 档：排除 Pro（用不起）与预览/实验档；优先 description 提新架构/多模态的
-const isPro = (m) => /pro/i.test(m.id || '') || /Pro/.test(m.name || '');
-const isPreview = (m) => /预览/.test(m.name || '') || /-exp/.test(m.id || '');
-const flashCandidates = models.filter((m) => !isPro(m) && !isPreview(m));
-if (flashCandidates.length === 0) throw new Error('口径里没有可用的 flash 正式档，中止（不写盘）');
-const FLASH =
-    flashCandidates.find((m) => /new architecture|multimodal/i.test(m.description || '')) ||
-    flashCandidates[0];
-const flashIds = new Set(flashCandidates.map((m) => m.id));
-if (!flashIds.has(FLASH.id)) throw new Error('flash 选档自检失败，中止');
+const modelIds = new Set(models.map(m => String(m.id || '').trim()));
+if (modelIds.size !== models.length || [...modelIds].some(id => !id)) {
+    throw new Error('llm-deepseek.models 存在空 id 或重复 id，中止');
+}
+if (models.length > ALIAS_KEYS.length) {
+    throw new Error(`DSH 当前 ${models.length} 个模型，超过 CCGUI 四个别名槽位；为避免静默丢模型，中止同步`);
+}
 
 log('=== 数据源 ===');
 log(DSH_CONFIG, '| mtime =', settingsMtime.toLocaleString());
-log(`llm-deepseek 共 ${models.length} 条 → flash 可用 ${flashCandidates.length} 条（Pro/预览已排除）`);
-log('flash 选档 =', FLASH.id, '（', FLASH.name, '）');
+log(`llm-deepseek 当前 ${models.length} 条 → 按配置顺序完整同步 ${models.length} 条（无模型过滤）`);
+models.forEach((model, index) => log(`  ${index + 1}. ${model.id}    ${model.name}`));
 
 // ---------------------------------------------------------------- 2. 读目标记录
 const cfgRaw = fs.readFileSync(CODEMOSS, 'utf8');
@@ -138,12 +135,18 @@ if (provider.name !== PROVIDER_NAME) throw new Error(`记录 ${PROVIDER_ID} 的 
 const env = provider?.settingsConfig?.env;
 if (!env || typeof env !== 'object') throw new Error('目标记录缺 settingsConfig.env，结构变化，中止');
 
-// [1m] 后缀沿用现值（四个别名共用同一约定）
+// [1m] 后缀沿用现值；四个别名按 DSH 配置顺序映射，少于四个时用最后一个补齐
 const suffix = ALIAS_KEYS.some((k) => typeof env[k] === 'string' && env[k].endsWith('[1m]')) ? '[1m]' : '';
-const target = FLASH.id + suffix;
+const aliasTargets = Object.fromEntries(ALIAS_KEYS.map((key, index) => {
+    const model = models[Math.min(index, models.length - 1)];
+    return [key, model.id + suffix];
+}));
+for (const [key, value] of Object.entries(aliasTargets)) log(`  ${key} = ${value}`);
 
 const changes = {};
-for (const k of ALIAS_KEYS) if (env[k] !== target) changes[k] = [env[k], target];
+for (const k of ALIAS_KEYS) {
+    if (env[k] !== aliasTargets[k]) changes[k] = [env[k], aliasTargets[k]];
+}
 if (env.ANTHROPIC_BASE_URL !== BASE_URL) changes.ANTHROPIC_BASE_URL = [env.ANTHROPIC_BASE_URL, BASE_URL];
 
 if (typeof env.ANTHROPIC_AUTH_TOKEN !== 'string' || env.ANTHROPIC_AUTH_TOKEN.length === 0) {
@@ -195,8 +198,8 @@ const preChecks = {
         { ...env, ANTHROPIC_BASE_URL: '' , ...Object.fromEntries(ALIAS_KEYS.map((k) => [k, ''])) },
         { ...nextEnv, ANTHROPIC_BASE_URL: '', ...Object.fromEntries(ALIAS_KEYS.map((k) => [k, ''])) }
     ),
-    '四别名 = flash 选档且不含 Pro/口径外 id': ALIAS_KEYS.every((k) => nextEnv[k] === target) &&
-        !/pro/i.test(target),
+    '四别名 = DSH 当前模型清单按配置顺序映射': ALIAS_KEYS.every((k) => nextEnv[k] === aliasTargets[k]) &&
+    Object.values(aliasTargets).every(value => modelIds.has(value.replace(suffix, ''))),
     '端点正确': nextEnv.ANTHROPIC_BASE_URL === BASE_URL,
     'span 外逐字节未动': next.slice(0, open) === cfgRaw.slice(0, open) && next.slice(open + span.length) === cfgRaw.slice(close + 1),
     '目标 span 只变了预期行': keys.length === 0 || span !== before
@@ -239,7 +242,7 @@ const afterEnv = (() => {
     try { return JSON.parse(after)?.claude?.providers?.[PROVIDER_ID]?.settingsConfig?.env; }
     catch { return null; }
 })();
-const landed = afterEnv && ALIAS_KEYS.every((k) => afterEnv[k] === target);
+const landed = afterEnv && ALIAS_KEYS.every((k) => afterEnv[k] === aliasTargets[k]);
 if (!landed) {
     log('✗ 回读失败：写入后目标值丢失——大概率被 IDEA 插件内存态回写覆盖。建议关 IDEA 或稍后重跑。');
     process.exit(1);
