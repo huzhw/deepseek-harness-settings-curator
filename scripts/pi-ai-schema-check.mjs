@@ -22,12 +22,18 @@
 //       schema 随引擎升级走，不会像手写枚举校验那样漂移。
 import { readFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { join } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-// 引擎 checkout 候选：DSH_ENGINE_DIR 优先，其后是全局安装位（2026-09-19 实测位）
+// 引擎 checkout 候选：DSH_ENGINE_DIR 优先；
+//   ① <DSH_HOME>/profiles —— profile 自己的依赖位（0.1.7 起 bundle 装在这，= GUI 实际加载的 schema，最准）
+//   ② 桌面端引擎 checkout（dsh-tauri/dependencies/dsh）
+//   ③ 全局 CLI 安装位（旧锚点，2026-09-25 实测是 0.1.7-alpha.1，schema 已与运行期脱节 → 降为兜底）
+const DSH_HOME = process.env.DSH_HOME ?? join(process.env.USERPROFILE ?? '', '.dsh');
 const ENGINE_CANDIDATES = [
     process.env.DSH_ENGINE_DIR,
+    join(DSH_HOME, 'profiles'),
+    join(process.env.APPDATA ?? '', 'dsh-tauri', 'dependencies', 'dsh'),
     'C:/Users/Administrator/node_global/node_modules/@deepseek-ai/dsh',
 ].filter(Boolean);
 
@@ -38,9 +44,10 @@ for (const cand of ENGINE_CANDIDATES) {
     if (existsSync(pkg)) { engineDir = cand; requireFromEngine = createRequire(pathToFileURL(pkg)); break; }
 }
 if (!engineDir) {
-    console.error('[pi-ai-schema-check] 找不到 DSH 引擎 checkout（设 DSH_ENGINE_DIR 或确认 node_global 安装位）');
+    console.error('[pi-ai-schema-check] 找不到 DSH 引擎/依赖位（设 DSH_ENGINE_DIR，或确认 <DSH_HOME>/profiles 存在）');
     process.exit(1);
 }
+console.log(`[pi-ai-schema-check] schema 来源: ${engineDir}`);
 
 const YAML = requireFromEngine('yaml');
 const engineMod = (name) => import(pathToFileURL(join(engineDir, 'node_modules', name, 'lib', 'index.js')).href);
@@ -65,6 +72,90 @@ function sectionsOf(root) {
         else take(e);
     }
     return { layout: 'patch', sections, ids: Object.keys(sections) };
+}
+
+/**
+ * 从补丁所在目录向上找 profile 根（含 dsh.profile.bundles 的 package.json）。
+ * 支持校验 .bak/ 下的历史副本（其父目录才是 profile 根）。
+ * @param {string} startDir
+ * @returns {string|null}
+ */
+function findProfileDir(startDir) {
+    let dir = startDir;
+    for (let i = 0; i < 3; i += 1) {
+        const pkgFile = join(dir, 'package.json');
+        if (existsSync(pkgFile)) {
+            try {
+                const bundles = JSON.parse(readFileSync(pkgFile, 'utf8'))?.dsh?.profile?.bundles ?? [];
+                if (bundles.length) return dir;
+            } catch { /* 继续向上找 */ }
+        }
+        const parent = dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+    }
+    return null;
+}
+
+/**
+ * 读 profile 声明的全部 bundle，汇总「条目 id → 插件包名」。
+ * bundle 的 cordis.patch.yml 里含 !!js 表达式，解析告警一律静音（只取结构）。
+ * 找不到 package.json / bundle 文件时静默跳过——缺文件不算法失败。
+ * @param {string|null} profileDir
+ * @returns {Map<string, string>}
+ */
+function bundlePluginNames(profileDir) {
+    const map = new Map();
+    if (!profileDir) return map;
+    try {
+        const pkg = JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8'));
+        const bundles = pkg?.dsh?.profile?.bundles ?? [];
+        for (const bundle of bundles) {
+            // pnpm 布局：bundle 装在 profile 自己的 node_modules，或被提升到上级 profiles/node_modules
+            const candidates = [
+                join(profileDir, 'node_modules', bundle, 'cordis.patch.yml'),
+                join(profileDir, '..', 'node_modules', bundle, 'cordis.patch.yml'),
+            ];
+            const file = candidates.find((c) => existsSync(c));
+            if (!file) continue;
+            const doc = YAML.parse(readFileSync(file, 'utf8'), { logLevel: 'silent' });
+            const walk = (list) => {
+                for (const entry of list ?? []) {
+                    if (!entry || typeof entry !== 'object') continue;
+                    if (Array.isArray(entry.insert)) walk(entry.insert);
+                    if (entry.id && typeof entry.name === 'string' && !map.has(entry.id)) map.set(entry.id, entry.name);
+                }
+            };
+            walk(Array.isArray(doc) ? doc : doc?.entries);
+        }
+    } catch { /* 读不到就当没有 bundle 信息，不误判 */ }
+    return map;
+}
+
+/**
+ * ③ 插件包名一致性（2026-09-25 加）：补丁条目**显式写了 name** 时，必须与同 id 的 bundle 条目
+ * 逐字相同。引擎升级会把 bundle 里的插件包名换掉（0.1.7-rc.2 把 deepseek-official 从
+ * @deepseek-ai/dsh-llm-deepseek 换成 @deepseek-ai/dsh-llm-deepseek-api-key），补丁没跟着改
+ * 就会把该条目换成另一个插件 → config 被静默忽略、运行期回落内置目录，且没有任何报错。
+ * 只报「补丁与 bundle 都有同 id 条目」的冲突；补丁新增的独立条目不算错。
+ * @returns {string[]} 冲突描述
+ */
+function pluginNameConflicts(file, doc) {
+    const profileDir = findProfileDir(dirname(resolve(file)));
+    const bundleNames = bundlePluginNames(profileDir);
+    if (bundleNames.size === 0) return [];
+    const conflicts = [];
+    const check = (entry) => {
+        if (!entry || typeof entry !== 'object') return;
+        if (Array.isArray(entry.insert)) entry.insert.forEach(check);
+        if (!entry.id || typeof entry.name !== 'string') return;
+        const expected = bundleNames.get(entry.id);
+        if (expected !== undefined && expected !== entry.name) {
+            conflicts.push(`条目 ${entry.id}: 补丁 name = ${entry.name}，bundle 同 id 条目的 name = ${expected}`);
+        }
+    };
+    (Array.isArray(doc) ? doc : []).forEach(check);
+    return conflicts;
 }
 
 const args = process.argv.slice(2);
@@ -130,6 +221,18 @@ for (const file of targets) {
             console.log(`  [通过] llm-deepseek：${models.length} 条 → ${models.map((m) => m.id).join(', ') || '（继承内置目录）'}`);
         } catch (error) {
             console.error(`  [失败] llm-deepseek schema: ${error?.message ?? error}`);
+            failed = true;
+        }
+    }
+
+    // ③ 插件包名一致性（2026-09-25 加）：引擎升级改 bundle 包名时，补丁不同步就会静默失效
+    if (layout === 'patch') {
+        const conflicts = pluginNameConflicts(file, doc);
+        if (conflicts.length === 0) {
+            console.log('  [通过] 插件包名一致性：补丁里每条显式 name 都与 bundle 同 id 条目一致');
+        } else {
+            for (const c of conflicts) console.error(`  [失败] ${c}`);
+            console.error('    → 该条目的 config 会被静默忽略（无报错），运行期回落内置目录。改补丁 name 与 bundle 对齐即可。');
             failed = true;
         }
     }
