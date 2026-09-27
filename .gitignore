@@ -1,3 +1,4 @@
 .code-check.db
 .idea/
+.codegraph/
 __pycache__/
