@@ -120,6 +120,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
   ```
 - 梳理检查项：`models` 空 = 继承内置目录；id 重复 / name 缺失 / 与 pi-ai 渠道同款模型按"精简为先"去重（只留最稳或最便宜）；版本标记沿用 DeepSeek 系口径（0731=Flash 正式、0813=Pro 正式、-ga- =GA）；**id 一律用官方 API id 原样**（V4.1 Flash = `deepseek-flash`）。
 - 费用：价目见 §6 费用核查（缓存命中输入 0.05/0.10 元，差 30 倍）。
+- **当前档位（2026-10-08 架构师定）**：web 与 headless 两份补丁的 `llm-deepseek` config 均已显式 `reasoningEffort: max`（config 级单数键，与 `models` 同级；两端同步加是防面板 overlay 撞重复键）。同日架构师手改：`zhipu`/`zhipu-htc` 路由级 `reasoning: max`、`agent-default-model.reasoningEffort: max`。
 
 ### 8. opencode-go 渠道（OpenCode Go 套餐 · 订阅全量渠道）
 
@@ -143,7 +144,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
   - 挂 `/v1/responses`（`@ai-sdk/openai`）→ **`opencode-go-responses`，人工维护，巡检只报告不落库**（2026-09-27 定，见下方「responses 侧模型」）；
   - 其余（`/v1/chat/completions`）→ `opencode-go` 主路由。
   2026-09-17 时 messages 侧 = `union-alpha` 一条（官方标注限时免费）。端点表现有 responses 侧 **6 款**：`gpt-6-luna`、`gpt-5.6-luna`、`grok-4.7`、`grok-4.6`、`muse-spark-1.2-contributor`、`muse-spark-1.3-contributor`。
-- **responses 侧模型（2026-09-27 定，红线；当前状态：路由已撤、GPT Luna 系暂不收录——上游对该系返回 403 地区限制，等上游通了再按本节重建）**：这些模型官方只开 `/v1/responses`，挂进 `openai-completions` 主路由必然报错。**运维口径**：① 主路由里不许有它们（有则删）；② 将来要收：先重建 `opencode-go-responses` 路由（骨架：`api: openai-responses` + baseURL `…/zen/go/v1` + 同 `apiKeyEnv` + `displayName: OpenCode Go套餐(Responses协议)`，`name`/次数/排序仍按 §8 命名口径）；③ 重建后**必须同时把 `opencode-go-responses` 登记回 `opencode-go-session-header` 的 `providers`**（漏登记 → 400 `MissingSessionID`；登记随 profile 补丁热更新，**不用重启**，自证见下条）；④ 巡检目标清单里对应行要**停用**并注明"归 responses 路由"，否则 12:38 会把它搬回主路由（2026-09-27 事故根因）。
+- **responses 侧模型（2026-09-27 定，红线；当前状态：路由已撤、GPT Luna 系暂不收录——上游对该系返回 403 地区限制，等上游通了再按本节重建）**：这些模型官方只开 `/v1/responses`，挂进 `openai-completions` 主路由必然报错。**运维口径**：① 主路由里不许有它们（有则删）；② 将来要收：先重建 `opencode-go-responses` 路由（骨架：`api: openai-responses` + baseURL `…/zen/go/v1` + 同 `apiKeyEnv` + `displayName: OpenCode Go套餐(Responses协议)`，`name`/次数/排序仍按 §8 命名口径）；③ 重建后**必须同时把 `opencode-go-responses` 登记回 `opencode-go-session-header` 的 `providers`**（漏登记 → 400 `MissingSessionID`；登记随 profile 补丁热更新，**不用重启**，自证见下条）；④ 巡检目标清单里对应行要**停用**并注明"归 responses 路由"，否则 12:38 会把它搬回主路由（2026-09-27 事故根因）。**2026-10-08 复核：headless 补丁主路由曾残留 `gpt-6-luna`，已由新增的「headless 补丁模型对齐」任务首跑清除（web 侧无残留）；两份补丁的模型清单此后由任务 14 每日对齐。**
 - **新路由禁写两样东西（2026-09-27 实测）**：`compat.sessionAffinityFormat`（`openai-responses` 下是 withhold 字段，运行期 `assertOfferedCompatFields` 抛错拒载，且 §9 三道校验查不出来——schemastery 保留未知键、`Config()` 照样通过）；`reasoningEfforts` 非 `off` 档位写 `null`（同样只在运行期拒）。目录里 gpt-5.6-luna 的 `compat.sessionAffinityFormat: openai-nosession` **抄不得**——路由键不叫 `opencode-go` 就拿不到目录 compat，适配器改走默认 `openai` 亲和格式（请求多带 `session_id` + `x-client-request-id` 头），以一次最小请求 200 为准自证。
 - **新增模型必过三探针**（**只测新增**，旧模型不复扫——全量重测是白烧钱；旧模型仅在真报 4xx/5xx 时按错误驱动单条复检）：对候选模型各发一次最小请求（45s 超时、**必带 `x-opencode-session` 头**），三个端点各一次——`/chat/completions` 与 `/v1/messages` 用 `{model, max_tokens:16, messages:[{role:'user',content:'hi'}]}`，`/v1/responses` 用 `{model, input:'hi', max_output_tokens:16}`：
   - 主路两端都 200 → 归主路由 `opencode-go`（网关对老模型宽容，两路都能通属正常，按文档页端点表定归属）；
@@ -247,14 +248,14 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 
 ### 10. 定时任务与巡检排班
 
-> 本节 **2026-09-25 实测复核**（原 2026-09-23 快照）。**改过任务后顺手更新本节**，过期排班表会误导后来人。
+> 本节 **2026-10-08 实测复核**（原 2026-09-25 快照）。**改过任务后顺手更新本节**，过期排班表会误导后来人。
 >
 > **任务实档在哪（2026-09-23 实测）**：巡检已全部搬进**日报管家面板**——任务在 `daily_panel.ai_task` + `ai_task_schedule` 两张表（页面「日报管家 → AI 任务」，程序化读写走面板 `:18787/api/aitask/*`），由面板进程内的 node-schedule 触发；每次运行由面板 spawn `node <dsh 的 bin.js> --profile web --patch <一次性覆盖层> "<提示词>"`，工作目录固定 `~/.dsh/automations`。
 > - **DSH 侧两套调度器 2026-09-23 实测都已空**：桌面端插件调度器 `GET :13080/api/desktop/dsh-tauri-panel-scheduler/tasks` → `{"tasks":[]}`；引擎自带 `~/.dsh/crons/tasks` → 空（`scheduler_list` 查的也是它）。**别再往 DSH 侧找巡检任务**，改任务一律去面板。
 > - DSH 侧遗留的 `~/.dsh/automations/*.mjs|ps1`（09-10/09-19 那批）已无人调用，且仍写死 `settings.yaml` —— 复活前必须换锚 `profiles/web/cordis.patch.yml`。
 > - 判断「某轮巡检到底跑了没」：面板 `ai_task_log`（`/api/aitask/logs`，比自述可靠）最准，其次看 `~/.dsh/sessions/**/session*.jsonl.zstd` 的 mtime。
 
-排班表（面板实档 2026-09-25 查：9 条任务全部 `daily`，模型统一钉 `zhipu/glm-5.3-flash`，权限一律 `danger-full-access`，超时 1800s；**晚间档已取消**，全天窗口 12:30–13:50）：
+排班表（面板实档 2026-10-08 查：10 条任务全部 `daily`，模型统一钉 `zhipu/glm-5.3-flash`，权限一律 `danger-full-access`，超时 1800s；**晚间档已取消**，全天窗口 12:30–13:58）：
 
 | 面板任务 id | 时间 | 任务 | 落库口径 |
 |---|---|---|---|
@@ -267,6 +268,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 | 11 | 13:18 | deepseek CCGUI claude code 全量口径巡检 | CCGUI claude 段别名同步（`deepseek-claude-sync.mjs`；备份 `~\.dsh\backup\ccgui-claude\`） |
 | 12 | 13:26 | glm CCGUI claude code 智谱巡检 | CCGUI claude 段别名同步（`zhipu-claude-sync.mjs`；备份同上） |
 | 13 | 13:50 | 模型能力探测（`{{CAPABILITY_PENDING}}` 只填空槽） | **只查证、不写配置**；面板据末尾标记块落能力台账（`ai_model_capability`） |
+| 14 | 13:58 | headless 补丁模型对齐（grp=对齐巡检） | **web 为真源、web 永远只读**：把 headless 补丁的 `llm-pi-ai` + `llm-deepseek` 两段逐路由对齐到 web（models+全部模型键+路由级 reasoning 默认档，骨架键不一致也以 web 为准，多删少补）；permission 只报告不改；备份 `headless-cordis.patch.yml.bak-<时间戳>`+2 分钟并发防护+YAML/schema 双校验，败即还原。2026-10-08 首跑 success，清掉 headless 主路由 `gpt-6-luna` 残留 |
 
 排班原则（红线，改动前先读）：
 
@@ -278,6 +280,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - **落库三道校验（2026-09-25 加第③道，见 §9）**：YAML 语法 → schema → **插件包名与 bundle 一致**。第③道的由来：引擎升级把 `- id: llm-deepseek` 的插件包名换掉，补丁不同步时该条目 config 被静默忽略（无报错），巡检会"报告落库成功、选择器却显示内置默认名"——**假阳性**。改完补丁务必用 §7 的运行期自查复核，别只信文件。
 - **执行 profile 是 headless，不是 web**（2026-09-25 实测纠偏）：面板 spawn 的是 `node <CLI> --profile headless --patch <一次性覆盖层> --json -`，覆盖层由面板 `buildRunOverlay` 现拼（`llm-pi-ai` + `llm-deepseek` 段按 provider/model 求 **web ∪ headless 并集** + `permission` 段）。所以：**headless 侧也有一份 `llm-deepseek` 条目**，改配置真源（web）时若两端的同名嵌套键（如 `reasoningEfforts`）不一致，合并出的覆盖层可能撞 YAML 重复键 → 巡检启动即 `failed to parse overlay`（2026-09-25 11:09/11:10 实测两次）。
 - **Codex 侧那条（13:10）不写 profile 补丁、只读它** → 不受"2 分钟并发防护"约束（脚本内仍保留该防护，撞上就只出报告不落库）；必须排在 12:38 那轮之后，才能取到当天最新落库结果。它同样钉 `deepseek-official`：任务正文只读写 `~\.codex\models.json`（+ 兜底补 live 的 `model_catalog_json` 行），**一次都不碰 `.codemoss\config.json`**（CCGUI 私有状态，见 §8），也不碰 opencode-go 的 API。
+- **任务 14（13:58）写的是 headless 补丁，不是 web**（2026-10-08 加）：并发防护看的是 headless 文件的 LastWriteTime，web 侧只读；排在任务 13 之后，看到的是当天巡检+能力写回的最终态。**它的提示词里 headless 路径与备份前缀是字面量**（patrolPaths.js 未登记 headless 占位符），环境搬家/路径改名时要手动同步改这条任务的提示词（见坑位区）。
 
 权限与护栏：必须 `danger-full-access`——任务要写会话工作区之外的 `C:\Users\Administrator\.dsh\profiles\web\cordis.patch.yml`，且无人值守没人批权限，`read-only`/`workspace-write` 会在落盘那步被拒。每次落库：备份到 `profiles\web\.bak\cordis.patch.yml.bak-<时间戳>` → 只改自己那条条目的 models → YAML.parse + `pi-ai-schema-check.mjs` schema 校验（见 §9，2026-09-19 加）→ 任一不过立即回滚并报错停手。
 
@@ -286,7 +289,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - **日报管家面板（实际在跑的那套，2026-09-23 起）**：任务在面板「日报管家 → AI 任务」页管理，实档 = MySQL `daily_panel.ai_task` + `ai_task_schedule`；程序化读写走面板 `:18787/api/aitask/*`（**没有 `/tasks` 这个端点**，写错 404）：
   ```powershell
   xh get :18787/api/aitask/list                     # 列任务(响应字段是 items,不是 tasks)
-  xh get :18787/api/aitask/get id=3                 # 单条(含 schedules,编辑回填用)
+  xh get :18787/api/aitask/get id=3                 # 单条(2026-10-08 实测返回"任务不存在",传参不被认;字段改从 list 解析)
   xh post :18787/api/aitask/save id=3 prompt=...    # 改正文(未给的字段沿用库中现值)
   xh post :18787/api/aitask/run id=3                # 立即干跑一次(串行队列,一次只跑一个)
   xh get ":18787/api/aitask/logs?task_id=3"         # 运行台账(比自述可靠)
@@ -312,3 +315,4 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - **schema 过得去、运行期才拒的两类写法（2026-09-27 实测）**：`compat` 写 withhold 字段（`openai-responses`/`anthropic-messages` 各自 withhold 集合见 dsh-llm-pi-ai 的 `RESPONSES_COMPAT_GATE`/`anthropic` gate）与 `reasoningEfforts` 非 `off` 档位写 `null`。判据一句话：schemastery 会**原样保留未知键**，所以 `Config()` 不报错 ≠ 能跑；§9 三道是文件层，第四道（重启 + modelCatalog + 最小请求）才是运行层，见 §8 校验第 9 项。
 - **这份补丁还有第二个自动写手:日报管家面板的「模型能力」链**（2026-09-27 记）：每日 13:35 周期 + 任务 13（13:50）收尾时，面板把台账结论写回 **web 与 headless 两份** cordis.patch.yml 的 4 类键（视觉声明/档位映射/上下文长度只补缺/路由级默认档），带 `.bak-cap-` 备份与五重校验、**无差异不写文件**（所以 `.bak` 里平时没有 `.bak-cap-*`）。来源优先级 人工/适配器 > AI官方(ai-research) > 实测(probe) > 清单；机器写回的值带 `written_back_at` 章、不作为下轮基线（不升格 profile），AI 可纠正清单/实测来源的槽位。**巡检任务 4/5/6/7 与它共用并发防护窗口**：巡检落库前看 LastWriteTime 的 2 分钟防护对它同样必要，撞窗就只出报告。上下文声明口径（2026-09-27 统一）：一律十进制 **1M=1000000**，web/headless 两份补丁的原 1048576 二进制写法已全量改齐（同一模型跨渠道数值不再分叉），页面显示「X万 / K|M」双单位、K/M 探测换算同步十进制。
 - **协议错与地区错长得不一样，别混（2026-09-27 双探针实测）**：`gpt-6-luna` 走 `/v1/chat/completions` → `400 ModelProtocolUnsupported: Model does not support this protocol.`（**这是配置错，拆 responses 路由能修**）；走 `/v1/responses` → `403 unsupported_country_region_territory`（本机直连出口 **3/3 稳定复现**，`gpt-5.6-luna` 同款；同端点 grok-4.6 / muse-spark-1.3 报的是各自上游错、不是地区）。**这个 403 是上游返回的地区/节点问题，路由拆对了也照样 403** —— 按 §8「间歇 503」同类处理：**别再改路由、别当配置错**，等上游或换出口；官方文档只对 Muse Spark 标了地区限制、没标 GPT Luna，所以更可能是上游侧问题。
+- **任务 14 提示词写死 headless 路径（2026-10-08 记）**：占位符表 `services/patrolPaths.js` 没有 headless 条目，对齐任务提示词里 `profiles/headless/cordis.patch.yml` 与备份前缀 `profiles\web\.bak\headless-cordis.patch.yml.bak-` 是字面量——环境搬家先改这条任务正文（面板 `:18787/api/aitask/save`）。另：沙箱/非 tty 下 xh 要加 `--ignore-stdin`，pwsh 传内层双引号要转义（`payload:='{\"args\":{}}'`），`GET /api/aitask/get` 传 id 不被认（返回"任务不存在"），字段从 `list` 解析。
