@@ -4,7 +4,8 @@
  *
  * 把 DSH 的 opencode-go 渠道当前完整模型清单同步到 Codex 侧三处：
  *   ① ~/.codex/models.json            Codex 模型目录（model_catalog_json 指向）
- *   ② ~/.codemoss/config.json         Codemoss 里 codex provider 的 configToml 模板 + customModelContextWindows.codex（claude 段不碰）
+ *   ② ~/.codemoss/config.json         Codemoss 里 codex provider 的 configToml 模板 + customModelContextWindows.codex（claude 段不碰；
+ *                                     该根键 2026-09-28 起被 CCGUI 重写配置时删除，缺失只告警跳过，不再阻断落库）
  *   ③ ~/.codex/config.toml            live 配置：默认模型行 + model_catalog_json 行兜底
  *
  * 口径（红线）
@@ -267,16 +268,27 @@ let codemossNew = codemossOld;
     codemossNew = codemossNew.slice(0, lit.start) + esc(tomlNew) + codemossNew.slice(lit.end);
 }
 
-// customModelContextWindows.codex 补齐
+// customModelContextWindows.codex 补齐（2026-10-09 降级为"软前置"）
+// 背景：CCGUI 于 2026-09-28 10:53 重写 ~/.codemoss/config.json（v2 结构）时把该根键整体删了，
+// 而本脚本原先把"键必须存在"当硬前置 → 生成阶段直接 throw → 预览与 --apply 全崩、models.json
+// 连续 12 天空转（面板任务 10 每轮正文都写"失败停止"，但 agent 正常退出，台账仍记 success，故一直无人发现）。
+// 该键只影响 CCGUI 侧对自建模型的上下文长度映射；Codex 本体读的是 models.json 里的 context_window，
+// 与模型能否调用无关。因此缺失时只告警跳过，不再阻断落库。
+const cmHasCtxWindows = !!(cmObj.customModelContextWindows && cmObj.customModelContextWindows.codex);
 {
     const rootKey = codemossNew.indexOf('"customModelContextWindows"');
-    if (rootKey < 0) throw new Error('codemoss 里找不到 customModelContextWindows');
-    const codexKey = codemossNew.indexOf('"codex"', rootKey);
-    const { open, close } = objectSpan(codemossNew, codexKey);
-    const existing = cmObj.customModelContextWindows.codex;
-    const keys = [...Object.keys(existing), ...slugs.filter((s) => !(s in existing))];
-    const block = '{\n' + keys.map((k) => `      ${JSON.stringify(k)}: 1000000`).join(',\n') + '\n    }';
-    codemossNew = codemossNew.slice(0, open) + block + codemossNew.slice(close + 1);
+    if (rootKey < 0) {
+        log('--- 告警：codemoss 里没有 customModelContextWindows（CCGUI 新版重写配置时已删该根键）');
+        log('    本轮跳过 contextWindows 补齐与对应校验，不阻断 models.json 落库；');
+        log('    如需恢复该映射，请在 CCGUI 供应商管理里保存/应用一次，让插件自己写回。 ---');
+    } else {
+        const codexKey = codemossNew.indexOf('"codex"', rootKey);
+        const { open, close } = objectSpan(codemossNew, codexKey);
+        const existing = cmObj.customModelContextWindows.codex;
+        const keys = [...Object.keys(existing), ...slugs.filter((s) => !(s in existing))];
+        const block = '{\n' + keys.map((k) => `      ${JSON.stringify(k)}: 1000000`).join(',\n') + '\n    }';
+        codemossNew = codemossNew.slice(0, open) + block + codemossNew.slice(close + 1);
+    }
 }
 
 // ---------------------------------------------------------------- 4. 生成 live config.toml
@@ -298,6 +310,12 @@ const liveNew = ll.join(liveEol);
 // ---------------------------------------------------------------- 5. 落库前校验
 const cmAfter = JSON.parse(codemossNew);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// 插件私有状态的健康项（2026-10-09 定为"只提示、不拦"）：
+// 脚本按红线无权写 .codemoss\config.json（写了会让 appliedProviderRevision 失配、Codex 会话罢工），
+// 模板侧的问题脚本修不了；再拿它当"不过即不写盘"的硬闸门，插件哪天重写配置就会把整条同步链永久卡死
+// ——2026-09-28 那次重写（根键 customModelContextWindows 与模板 catalog 行同时丢失）就是这么让
+// models.json 空转了 12 天。故这两项只在校验表下打 WARN，不参与落库闸门。
+const templateHasCatalogLine = tomlOld.includes('model_catalog_json');
 const preChecks = {
     'codemoss JSON 可解析': true,
     'codemoss 根键未变': same(Object.keys(cmObj).sort(), Object.keys(cmAfter).sort()),
@@ -305,8 +323,9 @@ const preChecks = {
     'codemoss codex 元信息未变': cmObj.codex.appliedProviderId === cmAfter.codex.appliedProviderId &&
         cmObj.codex.appliedProviderRevision === cmAfter.codex.appliedProviderRevision &&
         cmObj.codex.localConfigAuthorized === cmAfter.codex.localConfigAuthorized,
-    'codemoss 模板含 model_catalog_json（长期口径的关键）': tomlOld.includes('model_catalog_json'),
-    'contextWindows 覆盖全部目录模型': slugs.every((s) => s in cmAfter.customModelContextWindows.codex),
+    'contextWindows 覆盖全部目录模型': cmHasCtxWindows
+        ? slugs.every((s) => s in cmAfter.customModelContextWindows.codex)
+        : true, // 根键缺失时跳过；下面单独打 WARN，不把它伪装成"通过"
     'models.json 可解析且条数正确': JSON.parse(catalogNew).models.length === slugs.length
 };
 log('--- 落库前校验 ---');
@@ -314,6 +333,15 @@ let ok = true;
 for (const [k, v] of Object.entries(preChecks)) {
     log((v ? '  PASS  ' : '  FAIL  ') + k);
     if (!v) ok = false;
+}
+if (!cmHasCtxWindows) {
+    log('  WARN  codemoss 无 customModelContextWindows 根键：contextWindows 校验已跳过（不判失败）');
+}
+if (!templateHasCatalogLine) {
+    log('  WARN  CCGUI 供应商模板缺 model_catalog_json 行（插件私有状态，脚本按红线不写）——本轮不阻断：');
+    log('        live config.toml 由本脚本每轮兜底补回；但你在 CCGUI 里"应用/切换"一次供应商就会刷掉它，');
+    log('        届时 Codex 会临时读不到模型目录。建议在 CCGUI 供应商管理 → Codex → OpenCode Go 的 configToml 里加回：');
+    log(`        model_catalog_json = ${JSON.stringify(CATALOG)}`);
 }
 if (!ok) { log('校验未全过，未写入任何文件'); process.exit(1); }
 
@@ -329,7 +357,9 @@ if (codemossOld !== codemossNew) {
     log('--- .codemoss/config.json 差异（' + (WRITE_CODEMOSS ? '会被写入' : '只报不写，CCGUI 托管状态需保护') + '）---');
     log('  模板 model 行 现网 =', (tomlOld.match(/^model = .*/m) || ['-'])[0], '| 口径应为 =', `model = "${DEFAULT_MODEL}"`);
     log('  模板含 model_catalog_json =', tomlOld.includes('model_catalog_json'));
-    log('  contextWindows.codex 缺的键 =', slugs.filter((s) => !(s in cmObj.customModelContextWindows.codex)).join(', ') || '无');
+    log('  contextWindows.codex 缺的键 =', cmHasCtxWindows
+        ? (slugs.filter((s) => !(s in cmObj.customModelContextWindows.codex)).join(', ') || '无')
+        : '(无该根键：CCGUI 新版已不维护；需恢复请在插件里保存/应用一次供应商)');
     if (!WRITE_CODEMOSS) {
         log('  提示：模板已带 model_catalog_json 就别动它（插件每次应用都按模板重写 live 配置）；');
         log('        若哪天发现模板里没了这行，请在 CCGUI 供应商管理里手工加回并重新"应用"。');
