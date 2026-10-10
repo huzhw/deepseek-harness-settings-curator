@@ -12,7 +12,7 @@
 - [daily-record-gitlab-md](https://github.com/huzhw/daily-record-gitlab-md-skill)：日报记录
 - [daily-merge-gitlab-excel](https://github.com/huzhw/daily-merge-gitlab-excel-skill)：日报合并
 - [code-check](https://github.com/huzhw/code-check-skill)：增量代码隐患检查
-- [agent-config-sync-check](https://github.com/huzhw/agent-config-sync-check)：六端同步守卫：链接/硬链接/README 同步检查与修复
+- [agent-config-sync-check](https://github.com/huzhw/agent-config-sync-check)：七端同步守卫：链接/硬链接/README 同步检查与修复
 - [deepseek-harness-plugin-doctor](https://github.com/huzhw/deepseek-harness-plugin-doctor)：DSH 插件与升级体检医生
 - [daily-report-panel](https://github.com/huzhw/daily-report-panel)：日报管家（关联仓库，非 skill，自动合并/导出/发件）
 
