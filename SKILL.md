@@ -125,7 +125,8 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 ### 8. opencode-go 渠道（OpenCode Go 套餐 · 订阅全量渠道）
 
 **口径（红线，与官网/智谱/百炼不是一套逻辑）**
-- 定位：OpenCode Go 订阅渠道（$10/月、$100 用量，仅订阅用户可用）；**按线上协议拆两条常驻路由**（2026-09-17 定，见下方「协议分路由」）：`opencode-go`（`api: openai-completions`、baseURL `https://opencode.ai/zen/go/v1`）与 `opencode-go-anthropic`（`api: anthropic-messages`、baseURL `https://opencode.ai/zen/go`，**不带 `/v1`**——适配器自动补 `/v1/messages`）。另有第三条 Responses 路由 `opencode-go-responses`：**2026-09-27 曾建、当晚已撤**（GPT Luna 系上游 403 地区限制，Luna 暂不启用），口径与重建步骤见下方「responses 侧模型」。
+- 定位：OpenCode Go 订阅渠道（$10/月、$100 用量，仅订阅用户可用）；**按线上协议拆两条常驻路由**（2026-09-17 定，见下方「协议分路由」）：`opencode-go`（`api: openai-completions`、baseURL `https://opencode.ai/zen/go/v1`）与 `opencode-go-anthropic`（`api: anthropic-messages`、baseURL `https://opencode.ai/zen/go`，**不带 `/v1`**——适配器自动补 `/v1/messages`）。
+另有第三条 Responses 路由 `opencode-go-responses`：**2026-09-27 曾建、当晚已撤；2026-10-10 重建并纳入任务 4 自动维护**（骨架：`api: openai-responses` + baseURL `…/zen/go/v1` + 同 `apiKeyEnv` + `displayName: OpenCode Go套餐(Responses协议)` + 路由级 `reasoning: high` 默认档；grok-4.6/4.7 已写进该路由并实测通）。**三条路由同等自动维护，不存在"人工维护"的路由**。
 - **全量收录**：官方「当前支持的模型列表」里的模型**一个不落**，只增不减（官方下架才删）；**不做三线口味精简、不跨渠道去重、不与官网/智谱/百炼合并口径**。**阈值口径废止（2026-09-26 架构师定，原 2026-09-20 的「<1000 不收录」作废）**：不再按请求数过滤——收录范围 = 官方支持列表 − 巡检目标清单停用/待复核（人工启停为准）；次数只用于 name 显示与排序；清单里不想要的模型用「停用」开关处理，下一轮巡检自动摘掉。
 - **displayName 协议后缀（2026-09-20 定）**：渠道 displayName 统一带协议标注——`openai-completions` 加 `(OpenAi协议)`、`anthropic-messages` 加 `(Anthropic协议)`（实例：`OpenCode Go套餐(OpenAi协议)` / `OpenCode Go套餐(Anthropic协议)` / `OpenCode Go套餐(Responses协议)` / `智谱GLM官方(Anthropic协议)` / `OpenRouter(直连)(OpenAi协议)`）；巡检只守不碰（骨架键），改名只由人工做；displayName 改完**热生效**（2026-09-27 实测 profile 行热更新，无需重启），GUI 选择器里若没立刻看到就刷新页面。deepseek官网（llm-deepseek 独立适配器）不参与此约定。
 - **命名（2026-09-25 用户口径改为缩写）**：`[新/][N倍/]OpenCode/<显示名>/<参数量?>(/<版本?>)/5h·N`
@@ -141,18 +142,27 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - **协议（`api`）是路由级，模型级覆盖不了**：一个 provider 只能有一种线上协议，模型级只认 `name/contextWindow/maxTokens/input/reasoningEfforts/compat`。所以同渠道里走不同协议的模型**必须拆成不同路由**，不能只改某个模型的 `api`。
 - **归属判据 = 官方端点表**：文档页的端点表是唯一判据；`/zen/go/v1/models` 只返回 `id/object/created/owned_by`，**没有协议字段**，别指望它。**三分桶（2026-09-27 定，原"其余进主路由"的两分桶已作废）**：
   - 挂 `/v1/messages`（Anthropic SDK）→ `opencode-go-anthropic`；
-  - 挂 `/v1/responses`（`@ai-sdk/openai`）→ **`opencode-go-responses`，人工维护，巡检只报告不落库**（2026-09-27 定，见下方「responses 侧模型」）；
+
+  - 挂 `/v1/responses`（`@ai-sdk/openai`）→ **`opencode-go-responses`（2026-10-10 起由任务 4 自动维护，与另两条同等对待；发现该模型还在主路由就移过来）**；
   - 其余（`/v1/chat/completions`）→ `opencode-go` 主路由。
   2026-09-17 时 messages 侧 = `union-alpha` 一条（官方标注限时免费）。端点表现有 responses 侧 **6 款**：`gpt-6-luna`、`gpt-5.6-luna`、`grok-4.7`、`grok-4.6`、`muse-spark-1.2-contributor`、`muse-spark-1.3-contributor`。
-- **responses 侧模型（2026-09-27 定，红线；当前状态：路由已撤、GPT Luna 系暂不收录——上游对该系返回 403 地区限制，等上游通了再按本节重建）**：这些模型官方只开 `/v1/responses`，挂进 `openai-completions` 主路由必然报错。**运维口径**：① 主路由里不许有它们（有则删）；② 将来要收：先重建 `opencode-go-responses` 路由（骨架：`api: openai-responses` + baseURL `…/zen/go/v1` + 同 `apiKeyEnv` + `displayName: OpenCode Go套餐(Responses协议)`，`name`/次数/排序仍按 §8 命名口径）；③ 重建后**必须同时把 `opencode-go-responses` 登记回 `opencode-go-session-header` 的 `providers`**（漏登记 → 400 `MissingSessionID`；登记随 profile 补丁热更新，**不用重启**，自证见下条）；④ 巡检目标清单里对应行要**停用**并注明"归 responses 路由"，否则 12:38 会把它搬回主路由（2026-09-27 事故根因）。**2026-10-08 复核：headless 补丁主路由曾残留 `gpt-6-luna`，已由新增的「headless 补丁模型对齐」任务首跑清除（web 侧无残留）；两份补丁的模型清单此后由任务 14 每日对齐。**
+- **responses 侧模型
+（2026-09-27 定，2026-10-10 改为三路由全自动）**：这些模型官方只开 `/v1/responses`，挂进 `openai-completions` 主路由必然报错。**运维口径**：
+① 主路由里不许有它们（有则**移到** `opencode-go-responses`，不是删掉）；② 它们一律写进 `opencode-go-responses`（骨架：`api: openai-responses` + baseURL `…/zen/go/v1` + 同 `apiKeyEnv` + `displayName: OpenCode Go套餐(Responses协议)` + 路由级 `reasoning: high` 默认档——**不声明 off 且必须钉默认档**，否则上游对 grok 系报 400 `does not support reasoning_effort value none`；路由被手删就按此重建），`name`/次数/排序仍按 §8 命名口径；③ 该路由键**必须登记在 `opencode-go-session-header` 的 `providers`**（2026-10-10 已补登记；漏登记 → 400 `MissingSessionID`；登记随 profile 补丁热更新，**不用重启**，自证见下条）；④ 巡检目标清单的 disabled/retired 行是**唯一人工闸门**：官方列表里有但被停用的不收录；**"对应行要停用"的旧要求随人工维护口径一起废止**（想再收录就在清单里打开）。**2026-10-08 复核：headless 补丁主路由曾残留 `gpt-6-luna`，已由新增的「headless 补丁模型对齐」任务首跑清除（web 侧无残留）；
+两份补丁的模型清单此后由任务 14 每日对齐。2026-10-10 复核：路由重建 + `grok-4.6`/`grok-4.7` 经该路由实测通（最小请求返回 200）；`gpt-6-luna`/`gpt-5.6-luna` 走 `/v1/responses` 仍 403 地区（环境侧，非配置错）。**
 - **新路由禁写两样东西（2026-09-27 实测）**：`compat.sessionAffinityFormat`（`openai-responses` 下是 withhold 字段，运行期 `assertOfferedCompatFields` 抛错拒载，且 §9 三道校验查不出来——schemastery 保留未知键、`Config()` 照样通过）；`reasoningEfforts` 非 `off` 档位写 `null`（同样只在运行期拒）。目录里 gpt-5.6-luna 的 `compat.sessionAffinityFormat: openai-nosession` **抄不得**——路由键不叫 `opencode-go` 就拿不到目录 compat，适配器改走默认 `openai` 亲和格式（请求多带 `session_id` + `x-client-request-id` 头），以一次最小请求 200 为准自证。
 - **新增模型必过三探针**（**只测新增**，旧模型不复扫——全量重测是白烧钱；旧模型仅在真报 4xx/5xx 时按错误驱动单条复检）：对候选模型各发一次最小请求（45s 超时、**必带 `x-opencode-session` 头**），三个端点各一次——`/chat/completions` 与 `/v1/messages` 用 `{model, max_tokens:16, messages:[{role:'user',content:'hi'}]}`，`/v1/responses` 用 `{model, input:'hi', max_output_tokens:16}`：
   - 主路两端都 200 → 归主路由 `opencode-go`（网关对老模型宽容，两路都能通属正常，按文档页端点表定归属）；
   - **只有 `/v1/messages` 200、`/chat/completions` 5xx** → 归 `opencode-go-anthropic`（2026-09-17 实测 union-alpha 走 chat/completions 报 `500 Internal server error`，走 messages 200）；
-  - **只有 `/v1/responses` 200** → 归 `opencode-go-responses`（GPT 6 Luna 类；**归进去=人工接管，巡检不写它的 models**，只报告"应迁路由"）；
+
+  - **只有 `/v1/responses` 200** → 归 `opencode-go-responses`（GPT Luna / grok 系类；**2026-10-10 起直接写进该路由的 models**，不再"只报告"）；
   - 探针命令与原始响应摘要要写进巡检报告。
-- **路由键必须登记进会话头插件**：`profiles/web/cordis.patch.yml` 的 `opencode-go-session-header` 行 `providers` 要含**所有** opencode 系路由键（现为 `opencode` / `opencode-go` / `opencode-go-anthropic`；2026-09-27 曾加 `opencode-go-responses`，撤路由时同步摘键）。漏登记 → 上游 400 `MissingSessionID`。**改完不用重启（2026-09-27 实测纠偏）**：profile 补丁行是**热更新**的——给该插件行临时加 `debugFile` 写路径，改完约 20 秒内即生效，调试文件随即出现 `{"provider":"opencode-go","header":"x-opencode-session","value":"<会话id>"}` 记录（这份 config 对象里 `providers` 已含新键）；撤掉 `debugFile` 同样即时生效。插件 README 说的 restart 指**包自带 bundle 层**，**profile 覆盖行不适用**；且引擎日志里**没有**该插件的 logger 输出（logs 目录全部 grep 零命中），所以别拿"启动日志那行"当自证——**唯一可靠自证 = 临时 `debugFile` + 看有没有写出记录（验完撤掉）**。会话头由 `dsh-opencode-session` 插件按路由键注入，2026-09-05 起上游强制要求。
-- **巡检只重建 models，不删路由、不碰 responses 路由**：`opencode-go-anthropic` 的 `api`/`baseURL`/`apiKeyEnv`/`displayName` 与注释，巡检一律不动；它只按上面的判据维护里面该放哪些模型。反过来，重建 `opencode-go` 时**必须把 messages 侧与 responses 侧模型都排除**，不许因为「官方列表里有」就写回主路由——messages 侧写回即 500（chat/completions 对 messages-only 模型是稳定 500，带不带会话头都一样，2026-09-17 复测）；**responses 侧写回即该模型调用报错（2026-09-27 事故：`gpt-6-luna` 被全量镜像回主路由 → 次日又报错）**。`opencode-go-responses` 的 models 由人工维护，巡检正文对它只许"发现异常写报告"，不许增删改。
+- **路由键必须登记进会话头插件**：`profiles/web/cordis.patch.yml` 的 `opencode-go-session-header` 行 `providers` 要含**所有** opencode 系路由键
+（现为 `opencode` / `opencode-go` / `opencode-go-anthropic` / `opencode-go-responses`——第四条 2026-10-10 随路由重建补登记）。漏登记 → 上游 400 `MissingSessionID`。**改完不用重启（2026-09-27 实测纠偏）**：profile 补丁行是**热更新**的——给该插件行临时加 `debugFile` 写路径，改完约 20 秒内即生效，调试文件随即出现 `{"provider":"opencode-go","header":"x-opencode-session","value":"<会话id>"}` 记录（这份 config 对象里 `providers` 已含新键）；撤掉 `debugFile` 同样即时生效。插件 README 说的 restart 指**包自带 bundle 层**，**profile 覆盖行不适用**；且引擎日志里**没有**该插件的 logger 输出（logs 目录全部 grep 零命中），所以别拿"启动日志那行"当自证——**唯一可靠自证 = 临时 `debugFile` + 看有没有写出记录（验完撤掉）**。
+会话头由 `dsh-opencode-session` 插件按路由键注入，2026-09-05 起上游强制要求。**2026-10-10 复测（补第 4 个路由键当天）**：上面这个 debugFile 自证只在**交互式会话**里成立——面板执行路径（`--profile headless` + `--patch` 叠加层）**不加载本插件**：把插件段原样塞进叠加层、`debug: true` + `debugFile` 都齐备，跑 `opencode-go`（主路由 glm-5.3-flash）与 `opencode-go-responses`（grok-4.6）**都没有任何 debug 输出**，两次请求均 HTTP 200 拿到回复。结论：面板跑的三条路由**不需要**会话头、也不会 400 `MissingSessionID`；`providers` 登记只对交互式会话有意义（web 侧 2026-10-10 已补齐第 4 个键，`dsh --profile web --dump-config` 可见）。
+
+- **巡检只重建 models，不删路由**：`opencode-go-anthropic` 的 `api`/`baseURL`/`apiKeyEnv`/`displayName` 与注释，巡检一律不动；它只按上面的判据维护里面该放哪些模型。反过来，重建 `opencode-go` 时**必须把 messages 侧与 responses 侧模型都排除**，不许因为「官方列表里有」就写回主路由——messages 侧写回即 500（chat/completions 对 messages-only 模型是稳定 500，带不带会话头都一样，2026-09-17 复测）；**responses 侧写回即该模型调用报错（2026-09-27 事故：`gpt-6-luna` 被全量镜像回主路由 → 次日又报错）**。
+**三条路由的 models 都归巡检重建（2026-10-10 起 responses 路由也在内）；三条路由的骨架键（`api`/`baseURL`/`apiKeyEnv`/`displayName`/路由级默认档/注释）一律不动。**
 - **上游间歇 503（2026-09-17 实测，不是配置问题）**：union-alpha 后端池约 1/3 概率**秒回** 503 `Endpoint is unavailable`，**成片出现**（坏窗口持续几分钟~几十分钟，同一请求过几分钟就通）；与 system 大小 / tools / max_tokens(≤32K) / 鉴权头样式（x-api-key 或双发）均无关。缺会话头是另一回事（400 `MissingSessionID`）。**别把 503 当配置错误去乱改路由**。缓解：装 `dsh-llm-retry` 插件 + 路由 `retryPolicy`（SERVER 属默认可重试码，默认 maxRetries=5、500ms 起指数退避）；没插件时就人工重发一次。
 
 **抓取逻辑（优先级严格，每轮两页都抓）**
@@ -165,21 +175,29 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 7. 抓不到 → 报「页面结构变化或抓取失败」，**绝不编造**；字段缺失写「未查到」；数据块挖不到就退回首屏徽章口径，报告注明「徽章盲区」。
 
 **生成**
-- 按口径产出**两条路由的 models 块**：`llm-pi-ai.providers.opencode-go.models`（chat/completions 侧）与 `llm-pi-ai.providers.opencode-go-anthropic.models`（messages 侧，通常 1~2 条）；YAML 同级缩进，`- id:` 8 空格、`name:` 10 空格。**第三条 `opencode-go-responses.models` 不在本任务产出范围**（人工维护，正文与校验都不碰它）。
-- **同一个 id 只许出现在一条路由里**：两路由并集 + 人工维护的 responses 路由 = 官方支持列表，交集 = ∅；responses 侧模型若还在主路由里，按 §8「responses 侧模型」删掉它。
+
+- 按口径产出**三条路由的 models 块**：`llm-pi-ai.providers.opencode-go.models`（chat/completions 侧）、`llm-pi-ai.providers.opencode-go-anthropic.models`（messages 侧，通常 1~2 条）与 `llm-pi-ai.providers.opencode-go-responses.models`（responses 侧）；YAML 同级缩进，`- id:` 8 空格、`name:` 10 空格。**三条同等对待、没有豁免项（2026-10-10 改）**。
+
+- **同一个 id 只许出现在一条路由里**：三条路由并集 = 官方支持列表 − 清单 disabled/retired，交集 = ∅；responses 侧模型若还在主路由里，按 §8「responses 侧模型」**移到** responses 路由（不是删掉）。
 
 **校验（必须全过，任一不过即回滚并报错，不静默）**
 1. `YAML.parse` 通过；
-2. **id 集合 diff（两路由并集，按清单停用/待复核 + responses 侧豁免，2026-09-27 改）**：官方列表 −（`opencode-go` ∪ `opencode-go-anthropic`）− **端点表标 `/v1/responses` 的模型**（人工维护，不算漏配）每一条都必须是巡检目标清单里标为 disabled 或 retired 的模型（其余条目漏配即判失败）**且** 并集 − 官方 = ∅，且并集内**无重复 id**；另加一条硬检：`opencode-go` 主路由里**出现任何 responses 侧 id 即判失败**（还原备份并写报告）；
-3. 条数比对（**按集合差算，别做纯数字相减**）：两条路由条数之和 = ｜官方列表 −（清单停用/待复核行）−（端点表 responses 侧模型）｜ —— 停用行里很可能**同时**含 responses 侧模型（现 5 条），纯做"N − a − b"会重复减一次，把对的配置判成失败。参照数（2026-09-27）：官方 32、opencode 侧清单行 32（启用 6、停用 26→现 25，`gpt-5.6-luna` 行已人工删除）、responses 侧 6 → 两路由应为 6 条；
+
+2. **id 集合 diff（三条路由并集，按清单 disabled/retired；2026-10-10 起 responses 侧豁免废止）**：官方列表 −（`opencode-go` ∪ `opencode-go-anthropic` ∪ `opencode-go-responses`）每一条都必须是巡检目标清单里标为 disabled 或 retired 的模型（其余条目漏配即判失败）**且** 并集 − 官方 = ∅，且并集内**无重复 id**；另加两条硬检：A) `opencode-go` 主路由里**出现任何 responses 侧 id 即判失败**；B) `opencode-go-responses` 里**出现端点表非 responses 侧的 id 即判失败**（两条都还原备份并写报告）；
+
+3. 条数比对（**按集合差算，别做纯数字相减**）：**三条路由**条数之和 = ｜官方列表 −（**opencode 系三条路由对应渠道**清单里 disabled/retired 的行）｜——只算 opencode 系清单行，别的渠道的停用行不进这个差集，纯做"N − a − b"会把对的配置判成失败。参照数（2026-10-10 快照）：官方 32；三条路由合计 = 32 −（opencode 系清单 disabled/retired 行数），实测数字见本节末「2026-10-10 实跑记录」；
 4. name 正则逐条 `^(新/)?(\d+倍/)?OpenCode/.+/5h·(\d+|无限)(/限)?$`（官方无预估的用 `5h·无限`，限时档末尾补 `/限`；确有其它例外须显式标注）；
 5. **排序单调性**：逐条解析 name 末尾 `5h·` 后的数字（「无限」按 +∞），序列必须**非递增**（排序键 = 显示值，促销值优先）——排错即判失败、还原备份；
-6. **路由骨架未被改动**：`opencode-go` 仍 `api: openai-completions` + baseURL `…/zen/go/v1`；`opencode-go-anthropic` 仍 `api: anthropic-messages` + baseURL `https://opencode.ai/zen/go`（无 `/v1`）+ 同 `apiKeyEnv`；任一被动过即判失败、还原备份；
+
+6. **路由骨架未被改动**：`opencode-go` 仍 `api: openai-completions` + baseURL `…/zen/go/v1`；`opencode-go-anthropic` 仍 `api: anthropic-messages` + baseURL `https://opencode.ai/zen/go`（无 `/v1`）+ 同 `apiKeyEnv`；`opencode-go-responses` 仍 `api: openai-responses` + baseURL `…/zen/go/v1` + 同 `apiKeyEnv` + 路由级 `reasoning: high` 默认档；任一被动过即判失败、还原备份；
 7. 落库前备份到 `C:\Users\Administrator\.dsh\profiles\web\.bak\cordis.patch.yml.bak-<时间戳>`，落库后回读打印全部 id/name（标明所属路由）供人工核；
 8. **pi-ai schema 校验（2026-09-19 加，必跑）**：`node "F:\idea-workspase-skills\deepseek-harness-settings-curator\scripts\pi-ai-schema-check.mjs" "C:\Users\Administrator\.dsh\profiles\web\cordis.patch.yml"`，exit 1 = 条目会被 DSH 拒载，立即还原备份——YAML.parse 只管语法，拦不住 `input` 超枚举这类 schema 拒载。脚本缺省目标已是 web 补丁，且**补丁里两个 llm 条目都不在时会直接判失败**（防"读空即跳过"的假通过）。
 9. **运行期必查（2026-09-27 加，第四道）**：三道全过 ≠ 能跑。`compat` 写 withhold 字段、`reasoningEfforts` 非 `off` 档位写 `null` 这类错误**三道全绿但运行期拒载**（schemastery 保留未知键，`Config()` 照单全收，只有 dsh-llm-pi-ai 运行期 `assertOfferedCompatFields` / 档位解析才抛 `PiAiCatalogError`）→ 改完**等约 30 秒**让 profile 补丁热更新（**2026-09-27 实测：profile 行不用重启**），再做两件自查：① `xh post :13080/api/session/modelCatalog ...`（§7）确认新路由/新模型真的进了运行期目录；② 对改动过的路由发一次最小请求，**判据看报错类型**：`200` 或 `403 地区` = 路由/协议通了；`400 ModelProtocolUnsupported` = 协议错（路由没接对）；`400 MissingSessionID` = 会话头没登记。任一不过即还原备份（真不行再重启 dsh）。
 
-**执行方式**：定时任务「OpenCode-go 渠道巡检（三协议）」（面板任务 id=4；2026-09-27 由「双协议」改名，因官方拆出 `/v1/responses` 第三条路由）按 §10 排班跑（B 模式自主落库：先备份 → 改 → 跑上面 1~9 项校验 → 任一失败即还原备份并报错）；人工梳理时并入 §1「最新 flash 巡视」同轮。
+**执行方式**：定时任务「OpenCode-go 渠道巡检（三协议）」（面板任务 id=4；2026-09-27 由「双协议」改名，因官方拆出 `/v1/responses` 第三条路由）
+按 §10 排班跑（B 模式自主落库：**三条路由一起**，先备份 → 改 → 跑上面 1~9 项校验 → 任一失败即还原备份并报错）；人工梳理时并入 §1「最新 flash 巡视」同轮。
+
+**体检（2026-10-10 加，只读）**：引擎 `server/src/services/patrolAudit.js`（9 个渠道白名单，含 `opencode-go-responses`，按 responses 协议探针），三个入口共用——① CLI `server/scripts/patrol-audit.mjs`（`--all/--channel/--id/--json/--out/--concurrency/--timeout`；`--out` 自己写 UTF-8，别用 `Tee-Object`，那是 UTF-16）；② 面板「巡检目标 → 可访问性体检」按钮（`POST/GET /api/patrol-target/audit`，默认只体检停用行）；③ 面板调度器 sched 任务 `patrol_audit`，每日 13:10 体检全部行（时刻=系统配置 `patrol.auditTime`，开关 `patrol.auditEnabled`）。判定 8 档：alive / delisted（上游明确说不存在，只有这档建议删）/ region / quota / agentic（仅 agentic harness）/ protocol（协议不符但模型活着）/ flaky / unknown（含"清单里有、请求不通"的防误删降级）；报告落 `server/data/patrol-audit-<时间戳>.txt` + `patrol-audit-last.json`。**体检不删行、不写配置**，删行要在页面点。
 
 **Codex 侧同步（models.json 归我们 + CCGUI 模板归插件）**——2026-09-10 起由定时任务「codex opencode-go 全量口径巡检」（13:10）每轮执行
 
@@ -260,7 +278,8 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 | 面板任务 id | 时间 | 任务 | 落库口径 |
 |---|---|---|---|
 | 3 | 12:30 | deepseek 官网巡检（`- id: llm-deepseek` 的 `config.models`） | 对账式：官网在服保留、**disabled / 404 一律删除**（人工停用优先） |
-| 4 | 12:38 | OpenCode-go 渠道巡检（三协议） | 自动落库（§8 全量镜像；两条路由 `opencode-go` + `opencode-go-anthropic`；**responses 侧模型排除，`opencode-go-responses` 人工维护、本任务不碰**） |
+
+| 4 | 12:38 | OpenCode-go 渠道巡检（三协议） | 自动落库（§8 全量镜像；**三条路由** `opencode-go` + `opencode-go-anthropic` + `opencode-go-responses`，responses 侧模型写第三条；清单 disabled/retired 是唯一人工闸门） |
 | 5 | 12:46 | OpenRouter 渠道巡检（`openrouter-go` 双协议） | 自动收录，仅前沿档 |
 | 6 | 12:54 | glm-智谱巡检（zhipu / zhipu-htc） | 自动收录，只增不删 |
 | 7 | 13:02 | 百炼巡检（bailian） | 自动收录，只增不删 |
@@ -269,6 +288,9 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 | 12 | 13:26 | glm CCGUI claude code 智谱巡检 | CCGUI claude 段别名同步（`zhipu-claude-sync.mjs`；备份同上） |
 | 13 | 13:50 | 模型能力探测（`{{CAPABILITY_PENDING}}` 只填空槽） | **只查证、不写配置**；面板据末尾标记块落能力台账（`ai_model_capability`） |
 | 14 | 13:58 | headless 补丁模型对齐（grp=对齐巡检） | **web 为真源、web 永远只读**：把 headless 补丁的 `llm-pi-ai` + `llm-deepseek` 两段逐路由对齐到 web（models+全部模型键+路由级 reasoning 默认档，骨架键不一致也以 web 为准，多删少补）；permission 只报告不改；备份 `headless-cordis.patch.yml.bak-<时间戳>`+2 分钟并发防护+YAML/schema 双校验，败即还原。2026-10-08 首跑 success，清掉 headless 主路由 `gpt-6-luna` 残留 |
+
+
+> **面板调度器另有一条只读任务（2026-10-10 加，不在上表 ai_task id 序列里）**：sched 任务 `patrol_audit`「巡检目标可访问性体检」，每日 13:10 体检**全部行**（时刻=系统配置「巡检目标 → 体检时刻」`patrol.auditTime`，开关 `patrol.auditEnabled`；页面按钮默认只体检停用行）。它**只读**：落 `server/data/patrol-audit-<时间戳>.txt` + `patrol-audit-last.json`，不写 profile 补丁、不动清单。13:10 与上表任务 10 同刻，面板任务串行队列会顺延，不碰写手并发窗口。
 
 排班原则（红线，改动前先读）：
 
