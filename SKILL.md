@@ -129,13 +129,14 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 另有第三条 Responses 路由 `opencode-go-responses`：**2026-09-27 曾建、当晚已撤；2026-10-10 重建并纳入任务 4 自动维护**（骨架：`api: openai-responses` + baseURL `…/zen/go/v1` + 同 `apiKeyEnv` + `displayName: OpenCode Go套餐(Responses协议)` + 路由级默认档【候选链 **max→high**，2026-10-15 起由面板能力写回器按系统配置「推理默认档位」维护，当前实测 `reasoning: max`；巡检只守骨架、不改这个值】；grok-4.6/4.7 已写进该路由并实测通）。**三条路由同等自动维护，不存在"人工维护"的路由**。
 - **全量收录**：官方「当前支持的模型列表」里的模型**一个不落**，只增不减（官方下架才删）；**不做三线口味精简、不跨渠道去重、不与官网/智谱/百炼合并口径**。**阈值口径废止（2026-09-26 架构师定，原 2026-09-20 的「<1000 不收录」作废）**：不再按请求数过滤——收录范围 = 官方支持列表 − 巡检目标清单停用/待复核（人工启停为准）；次数只用于 name 显示与排序；清单里不想要的模型用「停用」开关处理，下一轮巡检自动摘掉。
 - **displayName 协议后缀（2026-09-20 定）**：渠道 displayName 统一带协议标注——`openai-completions` 加 `(OpenAi协议)`、`anthropic-messages` 加 `(Anthropic协议)`（实例：`OpenCode Go套餐(OpenAi协议)` / `OpenCode Go套餐(Anthropic协议)` / `OpenCode Go套餐(Responses协议)` / `智谱GLM官方(Anthropic协议)` / `OpenRouter(直连)(OpenAi协议)`）；巡检只守不碰（骨架键），改名只由人工做；displayName 改完**热生效**（2026-09-27 实测 profile 行热更新，无需重启），GUI 选择器里若没立刻看到就刷新页面。deepseek官网（llm-deepseek 独立适配器）不参与此约定。
-- **命名（2026-09-25 用户口径改为缩写）**：`[新/][N倍/]OpenCode/<显示名>/<参数量?>(/<版本?>)/5h·N`
+- **命名（2026-09-25 用户口径改为缩写）**：`[新/][N倍/]OpenCode/<显示名>/<参数量?>(/<版本?>)/5h·N[/限][·训]`
   - **标记区前置**：官方「新」徽章拼 `新/`、落地页限时倍数拼 `N倍/`，两者都放在 `OpenCode` **前边**（都有则 `新/N倍/OpenCode/…`；只有一个就只拼那个；都没有则省略）；
   - **显示名带版本**（DeepSeek V4.1 Flash → `deepseek-v4.1-flash`）；**id 用官方 API id**（V4.1 Flash 的官方 id 是 `deepseek-flash`，官方命名不跟版本走）；
   - **name 里的〈显示名〉一律取官方显示名，禁止拿 API id 顶替**（2026-09-17 实踩：`union-alpha` 的官方显示名是 **Union Alpha Free**，巡检把 id 当显示名写成 `新/OpenCode/union-alpha/5h·无限` → 用户看不出这是哪个模型；正确写法 `新/OpenCode/Union Alpha Free/5h·无限/限`）。落地页/文档页显示什么就照抄什么（含 `Free`/`Preview`/`Experimental` 这类后缀），只把空格按需保留、大小写照官方；
   - 官方没给「N 次」预估的写 `5h·无限`；**限时供应/限时免费**的档在末尾补 `/限`（如 union-alpha）；
+  - **训练标记 `·训`（2026-10-27 加，架构师口径）**：官方隐私表 `Model training` 列凡不是 `Not used`（如 `Yes`）的模型，名字**最末尾**追加 `·训`（位置在 `/限` 之后），实例 `新/OpenCode/Iceman Contributor Free/5h·无限/限·训`；表里查不到的模型不打、绝不猜。起因 = `iceman-contributor-free` / `muse-spark-*-contributor` 这类「免费换训练数据」档，光看名字看不出数据会被拿去训练；
   - 参数量只标 §4 已核实数字，未披露不标；
-  - 调用次数以 `5h·N`（无预估写 `5h·无限`）拼在名字末尾——**别再写「每5小时N次」长串**（2026-09-25 用户嫌长）；整表按**显示值**（name 里 `5h·` 后的数字，**当轮显示值优先**——倍数活动进行中取促销值，活动结束取默认值）**倒序**；标记区（`新/`、`N倍/`）只随行移动、不参与排序；同次数按官方表原序。
+  - 调用次数以 `5h·N`（无预估写 `5h·无限`）拼在名字末尾——**别再写「每5小时N次」长串**（2026-09-25 用户嫌长）；整表按**显示值**（name 里 `5h·` 后的数字，**当轮显示值优先**——倍数活动进行中取促销值，活动结束取默认值）**倒序**；标记区（`新/`、`N倍/`、`·训`）只随行移动、不参与排序（解析次数先剥末尾 `(/限)?` 与 `(·训)?`）；同次数按官方表原序。
 - 三窗口（官方）：**每 5 小时 = 月限 20%、每周 50%、每月 100%**；预估请求数表按典型每请求 token 假设推算（如 deepseek-v4-flash 每次 410 输入 + 71,300 缓存 + 310 输出 token）。
 
 **协议分路由（2026-09-17 定，红线）**
@@ -173,6 +174,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 5. `/zen/go/v1/models`（需订阅鉴权，尽力抓；401/无权限就跳过并说明）——**只用来比对 id 集合，拿不到协议**；
 6. 文档页价格表与端点表**有陈旧残留行**（实例：MiniMax M2.5 有价格行、有端点行，但不在支持列表 → **不收录**）；与①冲突**一律以①为准**；
 7. 抓不到 → 报「页面结构变化或抓取失败」，**绝不编造**；字段缺失写「未查到」；数据块挖不到就退回首屏徽章口径，报告注明「徽章盲区」。
+8. **隐私表（`·训` 真源，2026-10-27 加）**：文档页 Privacy 段（`/zh/docs/go/` 实际跳到 https://opencode.ai/v2/docs/console/go/ ，表头 Model / Model training / Data retention）——取 `Model training` 列，不是 `Not used` 的模型名字末尾打 `·训`；表里缺行就不打。
 
 **生成**
 
@@ -186,8 +188,8 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 2. **id 集合 diff（三条路由并集，按清单 disabled/retired；2026-10-10 起 responses 侧豁免废止）**：官方列表 −（`opencode-go` ∪ `opencode-go-anthropic` ∪ `opencode-go-responses`）每一条都必须是巡检目标清单里标为 disabled 或 retired 的模型（其余条目漏配即判失败）**且** 并集 − 官方 = ∅，且并集内**无重复 id**；另加两条硬检：A) `opencode-go` 主路由里**出现任何 responses 侧 id 即判失败**；B) `opencode-go-responses` 里**出现端点表非 responses 侧的 id 即判失败**（两条都还原备份并写报告）；
 
 3. 条数比对（**按集合差算，别做纯数字相减**）：**三条路由**条数之和 = ｜官方列表 −（**opencode 系三条路由对应渠道**清单里 disabled/retired 的行）｜——只算 opencode 系清单行，别的渠道的停用行不进这个差集，纯做"N − a − b"会把对的配置判成失败。参照数（2026-10-10 快照）：官方 32；三条路由合计 = 32 −（opencode 系清单 disabled/retired 行数），实测数字见本节末「2026-10-10 实跑记录」；
-4. name 正则逐条 `^(新/)?(\d+倍/)?OpenCode/.+/5h·(\d+|无限)(/限)?$`（官方无预估的用 `5h·无限`，限时档末尾补 `/限`；确有其它例外须显式标注）；
-5. **排序单调性**：逐条解析 name 末尾 `5h·` 后的数字（「无限」按 +∞），序列必须**非递增**（排序键 = 显示值，促销值优先）——排错即判失败、还原备份；
+4. name 正则逐条 `^(新/)?(\d+倍/)?OpenCode/.+?/5h·(\d+|无限)(/限)?(·训)?$`（官方无预估的用 `5h·无限`，限时档末尾补 `/限`；确有其它例外须显式标注）；
+5. **排序单调性**：逐条解析 name 末尾 `5h·` 后的数字（先剥 `(/限)?` 与 `(·训)?` 后缀；「无限」按 +∞），序列必须**非递增**（排序键 = 显示值，促销值优先）——排错即判失败、还原备份；
 
 6. **路由骨架未被改动**：`opencode-go` 仍 `api: openai-completions` + baseURL `…/zen/go/v1`；`opencode-go-anthropic` 仍 `api: anthropic-messages` + baseURL `https://opencode.ai/zen/go`（无 `/v1`）+ 同 `apiKeyEnv`；`opencode-go-responses` 仍 `api: openai-responses` + baseURL `…/zen/go/v1` + 同 `apiKeyEnv` + 路由级默认档【候选链 **max→high**，2026-10-15 起由面板能力写回器按系统配置「推理默认档位」维护，当前实测 `reasoning: max`；巡检只守骨架、不改这个值】；任一被动过即判失败、还原备份；
 7. 落库前备份到 `C:\Users\Administrator\.dsh\profiles\web\.bak\cordis.patch.yml.bak-<时间戳>`，落库后回读打印全部 id/name（标明所属路由）供人工核；
@@ -211,7 +213,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - **本体实测必须带 `CODEX_HOME`（2026-09-23 实踩）**：`codex.exe` 0.155.1 起**不认 `USERPROFILE`/`HOME`**，按 Windows 用户档案解析 home；面板巡检跑在 LocalSystem 会话里 → 落到 `systemprofile` → 实测读到内置 9 条 gpt-*、3 项假 FAIL（落库其实是成功的）。脚本已改成 `execFileSync` 显式传 `CODEX_HOME=<HOME>\.codex`，实测 4 条与补丁目录逐条 MATCH。
 - **口径**（与 DSH 的 §8 全量口径不是一套）：
   - 收录集合 = 补丁 `- id: llm-pi-ai` 条目 `config.providers.opencode-go.models` 里 **id 匹配 `^deepseek` 或 `^glm`** 的条目（DeepSeek 全系 + GLM 全系，2026-09-10 为 8 条）；其余渠道内模型（mimo / kimi / minimax / qwen / hy / grok / longcat / omen / muse-spark / gpt-*）**一律不进 Codex 清单**。
-  - `slug` = 官方 API id **原样**（V4.1 Flash 的 slug 是 `deepseek-flash`）；**`display_name` = 照抄 DSH 的 `name` 整串**（别名与 DSH 一致，带 `新/`、`N倍/` 标记与 `5h·N`）；排序 = 按 name 末尾 `5h·` 后的数字倒序，同次数按补丁原序。
+  - `slug` = 官方 API id **原样**（V4.1 Flash 的 slug 是 `deepseek-flash`）；**`display_name` = 照抄 DSH 的 `name` 整串**（别名与 DSH 一致，带 `新/`、`N倍/` 标记与 `5h·N`、`/限`、`·训`）；排序 = 按 name 末尾 `5h·` 后的数字倒序，同次数按补丁原序。
   - 其余字段逐字沿用 Codex 目录模板（`base_instructions` / `supported_reasoning_levels` 五档 / `priority:1` / `context_window:1000000` / `effective_context_window_percent:95` …），**不新增不删字段**。
   - **口径默认模型 = DeepSeek 系里调用次数最大的那条的官方 id**（2026-09-10 为 `deepseek-flash`，4 倍用量 26,000 次/5h）。**但默认模型由 CCGUI 供应商模板的 `model` 行决定，脚本只报不写**——要改就在 CCGUI 供应商管理 UI 里改（见下）。
 - **落点与归属（2026-09-10 事故后定，红线）**：
