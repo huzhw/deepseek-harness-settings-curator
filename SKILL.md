@@ -60,7 +60,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - 参数量：多源交叉（vLLM recipes、厂商公告、目录官方 name）；MoE 取总参；查不到不标。
 - 版本标记（仅 DeepSeek 系有预览/正式之分）：`/正式`（0731=Flash 正式版、0813=Pro 正式版、-ga- 日期=GA 正式）或 `/预览`（无后缀活接口、未切正式的渠道）。商汤的"服务公测免费"是活动不是模型版本。
 - 命名规范：`<前缀>/<模型id>/<参数量>(/<版本>)`；前缀约定：百炼 / 火山方舟 / 公司网关 / OpenCode / OpenRouter / 商汤日月新 / 智谱 / 官网（deepseek-official 官方直连）。
-- **模态红线（2026-09-19 定，2026-09-27 细化为两层）**：**配置层** `input:` 只允许 `text` / `image` 两个值——pi-ai 适配器 schema 的模态枚举就这两个；omni/音视频模型官方再宣传 audio/video 也不许写进配置，写了**整个 `llm-pi-ai` 分节会被拒载**、全渠道模型从选择器集体消失（2026-09-18 实踩：百炼巡检给 `qwen3.8-omni-flash` 写 `audio/video`，当天起 6 路由 42 模型全部不显示）。**台账层已放开（2026-09-27）**：`ai_model_capability.input_modalities` 可如实记录 audio/video（全模态模型如 `qwen3.8-omni-flash`），探测与 AI 查证按模态并集落库、写回器永不下发 audio/video 进配置。视觉口径 = `input: [text, image]`。
+- **模态红线（两层）**：**配置层** `input:` 只允许 `text` / `image` 两个值——pi-ai 适配器 schema 的模态枚举就这两个；omni/音视频模型官方再宣传 audio/video 也不许写进配置，写了**整个 `llm-pi-ai` 分节会被拒载**、全渠道模型从选择器集体消失（例：百炼巡检给 `qwen3.8-omni-flash` 写 `audio/video`，当天起 6 路由 42 模型全部不显示）。**台账层已放开**：`ai_model_capability.input_modalities` 可如实记录 audio/video（全模态模型如 `qwen3.8-omni-flash`），探测与 AI 查证按模态并集落库、写回器永不下发 audio/video 进配置。视觉口径 = `input: [text, image]`。
 
 ### 3. 清理旧模型
 - 识别依据：调用 404、厂商下架、免费变收费、重复条目。
@@ -104,7 +104,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 ### 7. deepseek-official 官方直连渠道
 
 - 定位：DeepSeek 官方直连适配器，路由名 `deepseek-official`（不是 `deepseek`）；配置在补丁的 `- id: llm-deepseek` 条目（`config.models`），独立于 `- id: llm-pi-ai` 的 `config.providers`，两套适配器可并存。
-- **🔴 插件包名红线（2026-09-25 实踩，本节最高优先级）**：补丁里 `- id: llm-deepseek` 的 `name` 必须**逐字等于当时引擎 bundle 里同 id 条目的包名**——引擎 `0.1.7-rc.2` 起是 `@deepseek-ai/dsh-llm-deepseek-api-key`，**不是** `@deepseek-ai/dsh-llm-deepseek`（后者只是适配器库包，两包同名同版本号并存，极易看错）。
+- **🔴 插件包名红线（本节最高优先级）**：补丁里 `- id: llm-deepseek` 的 `name` 必须**逐字等于当时引擎 bundle 里同 id 条目的包名**——引擎 `0.1.7-rc.2` 起是 `@deepseek-ai/dsh-llm-deepseek-api-key`，**不是** `@deepseek-ai/dsh-llm-deepseek`（后者只是适配器库包，两包同名同版本号并存，极易看错）。
   - 写错名的后果：该条目 `config` 被**静默忽略**，运行期回落引擎内置目录 → 选择器里我们的别名消失、改显示 `DeepSeek-V41-Flash`/`DeepSeek-V4-Pro`，**无任何报错弹窗**；而 `settings/describe` 里 `user` 层仍显示你自己的别名（**文档层有值、运行层没值 = 中招特征**）。
   - 查证法：读引擎 bundle `@deepseek-ai/dsh-base/cordis.patch.yml`，grep `id: llm-deepseek` 看紧邻下一行 `name`；脚本 `scripts/pi-ai-schema-check.mjs` 已内置该校验（第 3 道，见 §9）。
 - 结构（照 schema 实录）：
@@ -132,7 +132,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - **命名（2026-09-25 用户口径改为缩写）**：`[新/][N倍/]OpenCode/<显示名>/<参数量?>(/<版本?>)/5h·N[/限][·训]`
   - **标记区前置**：官方「新」徽章拼 `新/`、落地页限时倍数拼 `N倍/`，两者都放在 `OpenCode` **前边**（都有则 `新/N倍/OpenCode/…`；只有一个就只拼那个；都没有则省略）；
   - **显示名带版本**（DeepSeek V4.1 Flash → `deepseek-v4.1-flash`）；**id 用官方 API id**（V4.1 Flash 的官方 id 是 `deepseek-flash`，官方命名不跟版本走）；
-  - **name 里的〈显示名〉一律取官方显示名，禁止拿 API id 顶替**（2026-09-17 实踩：`union-alpha` 的官方显示名是 **Union Alpha Free**，巡检把 id 当显示名写成 `新/OpenCode/union-alpha/5h·无限` → 用户看不出这是哪个模型；正确写法 `新/OpenCode/Union Alpha Free/5h·无限/限`）。落地页/文档页显示什么就照抄什么（含 `Free`/`Preview`/`Experimental` 这类后缀），只把空格按需保留、大小写照官方；
+  - **name 里的〈显示名〉一律取官方显示名，禁止拿 API id 顶替**（例：`union-alpha` 的官方显示名是 **Union Alpha Free**，巡检把 id 当显示名写成 `新/OpenCode/union-alpha/5h·无限` → 用户看不出这是哪个模型；正确写法 `新/OpenCode/Union Alpha Free/5h·无限/限`）。落地页/文档页显示什么就照抄什么（含 `Free`/`Preview`/`Experimental` 这类后缀），只把空格按需保留、大小写照官方；
   - 官方没给「N 次」预估的写 `5h·无限`；**限时供应/限时免费**的档在末尾补 `/限`（如 union-alpha）；
   - **训练标记 `·训`（2026-10-27 加，架构师口径）**：官方隐私表 `Model training` 列凡不是 `Not used`（如 `Yes`）的模型，名字**最末尾**追加 `·训`（位置在 `/限` 之后），实例 `新/OpenCode/Iceman Contributor Free/5h·无限/限·训`；表里查不到的模型不打、绝不猜。起因 = `iceman-contributor-free` / `muse-spark-*-contributor` 这类「免费换训练数据」档，光看名字看不出数据会被拿去训练；
   - 参数量只标 §4 已核实数字，未披露不标；
@@ -210,7 +210,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
   # 调试：--emit <目录> 导出"应然产物"做 diff；--force 忽略并发防护
   # ⚠️ --write-codemoss 会写 .codemoss\config.json —— 默认关闭，非必要别开（2026-09-10 事故成因）
   ```
-- **本体实测必须带 `CODEX_HOME`（2026-09-23 实踩）**：`codex.exe` 0.155.1 起**不认 `USERPROFILE`/`HOME`**，按 Windows 用户档案解析 home；面板巡检跑在 LocalSystem 会话里 → 落到 `systemprofile` → 实测读到内置 9 条 gpt-*、3 项假 FAIL（落库其实是成功的）。脚本已改成 `execFileSync` 显式传 `CODEX_HOME=<HOME>\.codex`，实测 4 条与补丁目录逐条 MATCH。
+- **本体实测必须带 `CODEX_HOME`**：`codex.exe` 0.155.1 起**不认 `USERPROFILE`/`HOME`**，按 Windows 用户档案解析 home；面板巡检跑在 LocalSystem 会话里 → 落到 `systemprofile` → 实测读到内置 9 条 gpt-*、3 项假 FAIL（落库其实是成功的）。脚本已改成 `execFileSync` 显式传 `CODEX_HOME=<HOME>\.codex`，实测 4 条与补丁目录逐条 MATCH。
 - **口径**（与 DSH 的 §8 全量口径不是一套）：
   - 收录集合 = 补丁 `- id: llm-pi-ai` 条目 `config.providers.opencode-go.models` 里 **id 匹配 `^deepseek` 或 `^glm`** 的条目（DeepSeek 全系 + GLM 全系，2026-09-10 为 8 条）；其余渠道内模型（mimo / kimi / minimax / qwen / hy / grok / longcat / omen / muse-spark / gpt-*）**一律不进 Codex 清单**。
   - `slug` = 官方 API id **原样**（V4.1 Flash 的 slug 是 `deepseek-flash`）；**`display_name` = 照抄 DSH 的 `name` 整串**（别名与 DSH 一致，带 `新/`、`N倍/` 标记与 `5h·N`、`/限`、`·训`）；排序 = 按 name 末尾 `5h·` 后的数字倒序，同次数按补丁原序。
@@ -232,7 +232,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
   - **CCGUI 重写 live 配置的规律**（2026-09-10 实测）：按供应商模板重写 → `model` 行被扳回模板值、**所有注释丢失**，但未知键（`notify` / `mcp_servers` / `projects` / `hooks` / `model_catalog_json`）**是合并保留的**。所以在 live 里改 `model` 行或加注释都是白干。
   - **备份别只放 `.codemoss`**：那目录归插件管，混进去的 `config.json.*` 容易和它自建的 `config.json.bak` 撞名；备份放 `~\.codex\` 等同级、插件不管的目录。（"插件会清 `.bak`"这条**未经证实**，别当事实。）
   - CCGUI 供应商模板里必须有 `model_catalog_json` 行，否则你在 UI 里切一次供应商就会把这行刷掉，**Codex 立刻不读 models.json**（2026-09-10 已由用户在 UI 里补上）。
-  - **路径转义层数**：TOML 基本字符串里写 `\\`，嵌在 config.json 的 JSON 字符串里就是 4 个反斜杠；写错一层 Codex 就找不到目录（2026-09-10 实踩，脚本自检抓出）。
+  - **路径转义层数**：TOML 基本字符串里写 `\\`，嵌在 config.json 的 JSON 字符串里就是 4 个反斜杠；写错一层 Codex 就找不到目录（脚本自检会抓出）。
   - `model_catalog_json` 是**整份替换**不是合并：文件里几条，Codex 就只剩几条选择。
   - 字段缺省由 Codex 自己填（`input_modalities` 默认 `["text","image"]`）→ 非视觉模型若报图片相关错，再单独加 `input_modalities: ["text"]`，别批量猜。
 
@@ -326,7 +326,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 ## 已知坑位
 
 - dsh-defend 会拦截任何"带密钥样式"的工具结果与 edit 参数；tool 参数也要避免 `Bearer <token>` 同行。
-- **引擎升级会换 bundle 里的插件包名（2026-09-25 实踩）**：补丁同 id 条目的 `name` 必须跟着换（`- id: llm-deepseek` 从 `@deepseek-ai/dsh-llm-deepseek` → `@deepseek-ai/dsh-llm-deepseek-api-key`）。症状 = "文件里明明有别名、选择器却显示引擎内置名、且零报错弹窗"；判据 = `settings/describe` 里该 ns 的 `user` 层（文档层）有你写的值、`value` 层（运行期）是引擎默认值。**升级引擎后先跑 §9 第③道校验，再动配置**；改完用 §7 的运行期自查复核。
+- **引擎升级会换 bundle 里的插件包名**：补丁同 id 条目的 `name` 必须跟着换（`- id: llm-deepseek` 从 `@deepseek-ai/dsh-llm-deepseek` → `@deepseek-ai/dsh-llm-deepseek-api-key`）。症状 = "文件里明明有别名、选择器却显示引擎内置名、且零报错弹窗"；判据 = `settings/describe` 里该 ns 的 `user` 层（文档层）有你写的值、`value` 层（运行期）是引擎默认值。**升级引擎后先跑 §9 第③道校验，再动配置**；改完用 §7 的运行期自查复核。
 - **巡检 CLI 与 GUI 可能不是同一个引擎（2026-09-25 实测）**：`{{DSH_CLI_DIR}}` = `C:\Users\Administrator\node_global\node_modules\@deepseek-ai\dsh`（**0.1.7-alpha.1**，面板 spawn 它跑 headless），GUI 跑的是桌面端 `C:\Users\Administrator\AppData\Roaming\dsh-tauri\dependencies\dsh`（**0.1.7-rc.2**）。两套引擎的 bundle 包名与内置目录可能不同：排查"某条目没生效"前，先确认是哪套引擎在加载它（本技能 `scripts/pi-ai-schema-check.mjs` 的 schema 来源已锚到桌面端引擎并回显路径）。
 - 补丁里顶层条目是 `- id: xxx`（0 列），其子键 2 空格起；模型条目缩进比旧 settings.yaml 整体深 2 格（pi-ai：路由键 6 / models 8 / 模型 `- id` 10 / name·input 12 / `- text` 14；deepseek：models 4 / 模型 `- id` 6 / name 8），编辑锚点别带错缩进。
 - edit 工具 old_string 需与文件精确一致（含缩进）；多行块编辑比逐行安全。
@@ -335,7 +335,7 @@ motto: "配置如园，常理常新。查证为准，不写未知。每次改动
 - dsh-auto-review 审查器 fork 继承会话路由：换默认模型 = 主代理+审查器同时换渠道，反之亦然。
 - zhipu key 明文在 `~/.dsh/.credentials.yaml`，补丁里只写 `apiKeyEnv` 变量名；dsh-defend 拦 `sk-`/Bearer 样式，写带 key 配置用"Authorization: Bearer 换行缩进下一行"写法。
 - Windows 沙箱受限令牌下 curl 的 schannel 报 `SEC_E_NO_CREDENTIALS`（TLS 挂），抓 https 用 node fetch 更稳；node 脚本写工作区 `_tmp\` 再跑，避免 shell 引号转义。
-- **`input:` 模态枚举只有 text/image（2026-09-18 实踩）**：百炼巡检给 omni 模型写 `audio/video` → 整个 `llm-pi-ai` 条目被 schema 拒载 → 6 路由 42 模型从选择器消失且**无报错弹窗**（进程内存留最后有效值，重启才暴露）。YAML.parse 查不出，必须跑 §9 的 schema 校验脚本。
+- **`input:` 模态枚举只有 text/image**：百炼巡检给 omni 模型写 `audio/video` → 整个 `llm-pi-ai` 条目被 schema 拒载 → 6 路由 42 模型从选择器消失且**无报错弹窗**（进程内存留最后有效值，重启才暴露）。YAML.parse 查不出，必须跑 §9 的 schema 校验脚本。
 - **schema 过得去、运行期才拒的两类写法（2026-09-27 实测）**：`compat` 写 withhold 字段（`openai-responses`/`anthropic-messages` 各自 withhold 集合见 dsh-llm-pi-ai 的 `RESPONSES_COMPAT_GATE`/`anthropic` gate）与 `reasoningEfforts` 非 `off` 档位写 `null`。判据一句话：schemastery 会**原样保留未知键**，所以 `Config()` 不报错 ≠ 能跑；§9 三道是文件层，第四道（重启 + modelCatalog + 最小请求）才是运行层，见 §8 校验第 9 项。
 - **这份补丁还有第二个自动写手:日报管家面板的「模型能力」链**（2026-09-27 记）：每日 13:35 周期 + 任务 13（13:50）收尾时，面板把台账结论写回 **web 与 headless 两份** cordis.patch.yml 的 4 类键（视觉声明/档位映射/上下文长度只补缺/路由级默认档），带 `.bak-cap-` 备份与五重校验、**无差异不写文件**（所以 `.bak` 里平时没有 `.bak-cap-*`）。来源优先级 人工/适配器 > AI官方(ai-research) > 实测(probe) > 清单；机器写回的值带 `written_back_at` 章、不作为下轮基线（不升格 profile），AI 可纠正清单/实测来源的槽位。**巡检任务 4/5/6/7 与它共用并发防护窗口**：巡检落库前看 LastWriteTime 的 2 分钟防护对它同样必要，撞窗就只出报告。上下文声明口径（2026-09-27 统一）：一律十进制 **1M=1000000**，web/headless 两份补丁的原 1048576 二进制写法已全量改齐（同一模型跨渠道数值不再分叉），页面显示「X万 / K|M」双单位、K/M 探测换算同步十进制。
 - **协议错与地区错长得不一样，别混（2026-09-27 双探针实测）**：`gpt-6-luna` 走 `/v1/chat/completions` → `400 ModelProtocolUnsupported: Model does not support this protocol.`（**这是配置错，拆 responses 路由能修**）；走 `/v1/responses` → `403 unsupported_country_region_territory`（本机直连出口 **3/3 稳定复现**，`gpt-5.6-luna` 同款；同端点 grok-4.6 / muse-spark-1.3 报的是各自上游错、不是地区）。**这个 403 是上游返回的地区/节点问题，路由拆对了也照样 403** —— 按 §8「间歇 503」同类处理：**别再改路由、别当配置错**，等上游或换出口；官方文档只对 Muse Spark 标了地区限制、没标 GPT Luna，所以更可能是上游侧问题。
